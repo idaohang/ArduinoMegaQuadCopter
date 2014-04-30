@@ -1,3 +1,4 @@
+#include <helper_3dmath.h>
 #include <TinyGPS++.h>
 #include <PinChangeInt.h>
 #include <Wire.h>
@@ -26,8 +27,8 @@
 #define AUXCH4                 A8
 
 /**esc ve rc maksimum minimum değerleri**/
-#define MIN                    1000 //?
-#define MAX                    1900 
+#define MIN                    700 // 1180 1185 1195 altı 
+#define MAX                    2300 //?
 /* IMU endpoints and calibration with offsets */
 #define accXmax                79
 #define accXmin               -79
@@ -39,6 +40,31 @@
 #define gyroXoffset            60
 #define gyroYoffset            11
 #define gyroZoffset           -4
+
+/*  PID configuration */
+#define PITCH_P_VAL 0.5
+#define PITCH_I_VAL 0
+#define PITCH_D_VAL 1
+
+#define ROLL_P_VAL 2
+#define ROLL_I_VAL 5
+#define ROLL_D_VAL 1
+
+#define YAW_P_VAL 2
+#define YAW_I_VAL 5
+#define YAW_D_VAL 1
+
+
+/* Flight parameters */
+#define PITCH_MIN -30
+#define PITCH_MAX 30
+#define ROLL_MIN -30
+#define ROLL_MAX 30
+#define YAW_MIN -180
+#define YAW_MAX 180
+#define PID_PITCH_INFLUENCE 20
+#define PID_ROLL_INFLUENCE 20
+#define PID_YAW_INFLUENCE 20
 
 /*********10DOF*******/
 ADXL345 acc;  int16_t ax, ay, az;
@@ -56,6 +82,12 @@ uint16_t       va, vb, vc, vd; // motor hızları
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
 uint16_t       ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8;
+int32_t        lastMicros; //barometre için
+
+Quaternion     q;                          // quaternion for mpu output
+VectorFloat    gravity;                   // gravity vector for ypr
+float          ypr[3]     = {0.0f,0.0f,0.0f};       // yaw pitch roll values
+float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -66,47 +98,32 @@ unsigned long  rcLastChange6 = micros();
 unsigned long  rcLastChange7 = micros(); 
 unsigned long  rcLastChange8 = micros();
 
-int32_t lastMicros;
+
 
 void setup(){
-    Wire.begin();
-    Serial.begin(57600);
-    Serial1.begin(38400); //GPS
-    initDOF();
-    initRC();
-    initMotors();
+  Wire.begin();
+  Serial.begin(57600);
+  Serial1.begin(38400); //GPS
+  initDOF();
+  initRC();
+  initMotors();
  }
 
 void loop(){
-	/*
-  while (Serial1.available() > 0)
-    if (gps.encode(Serial1.read()))
-    {
-      displayInfo();
-      delay(500);
-    }
-    */
-    baro.setControl(BMP085_MODE_TEMPERATURE);
-    
-    lastMicros = micros();
-    
-    while (micros() - lastMicros < baro.getMeasureDelayMicroseconds());
-    
-    temperature = baro.getTemperatureC();
-    baro.setControl(BMP085_MODE_PRESSURE_3);
-    
-    while (micros() - lastMicros < baro.getMeasureDelayMicroseconds());
-    
-    pressure = baro.getPressure();
-    altitude = baro.getAltitude(pressure);
-
-    Serial.print("T/P/A\t");
-    Serial.print(temperature); Serial.print("\t");
-    Serial.print(pressure); Serial.print("\t");
-    Serial.print(altitude);
-    Serial.println("");
-
-    delay(500);
+  Serial.print(ch1);
+  Serial.print("  ");
+  Serial.print(ch2);
+  Serial.print("  ");
+  Serial.print(ch3);
+  Serial.print("  ");
+  Serial.println(ch4);
+  delay(200);
+  /*
+  getYPR();                          
+  computePID();
+  calculateVelocities();
+  updateMotors();
+  */
  }
 
 void displayInfo(){
@@ -160,28 +177,28 @@ void displayInfo(){
  }
 
 void initDOF(){
-    acc.initialize();  boolean a = acc.testConnection();
-    acc.setRange(2); // 8g hassasiyet
-    acc.setOffset(35,47,-127);
-    baro.initialize(); boolean b = baro.testConnection();
-    mag.initialize();  boolean m = mag.testConnection();
-    gyro.initialize(); boolean g = gyro.testConnection();
-    
-    if(!(a & b & m & g))
-      initDOF();
+  acc.initialize();  boolean a = acc.testConnection();
+  acc.setRange(2); // 8g hassasiyet
+  acc.setOffset(35,47,-127);
+  baro.initialize(); boolean b = baro.testConnection();
+  mag.initialize();  boolean m = mag.testConnection();
+  gyro.initialize(); boolean g = gyro.testConnection();
+  
+  if(!(a & b & m & g))
+    initDOF();
  }
 
 void initMotors(){
-    a.attach(SOL_ON_MOTOR_PINI);   b.attach(SAG_ON_MOTOR_PINI);
-    c.attach(SOL_ARKA_MOTOR_PINI); d.attach(SAG_ARKA_MOTOR_PINI);
-    delay(10);
-    a.writeMicroseconds(MIN); b.writeMicroseconds(MIN);
-    c.writeMicroseconds(MIN); d.writeMicroseconds(MIN);
+  a.attach(SOL_ON_MOTOR_PINI);   b.attach(SAG_ON_MOTOR_PINI);
+  c.attach(SOL_ARKA_MOTOR_PINI); d.attach(SAG_ARKA_MOTOR_PINI);
+  delay(10);
+  a.writeMicroseconds(MIN); b.writeMicroseconds(MIN);
+  c.writeMicroseconds(MIN); d.writeMicroseconds(MIN);
  }
 
-void updateAllMotors(){
-  	a.writeMicroseconds(va);  b.writeMicroseconds(vb);
-  	c.writeMicroseconds(vc);  d.writeMicroseconds(vd);
+void updateMotors(){
+  a.writeMicroseconds(va);  b.writeMicroseconds(vb);
+  c.writeMicroseconds(vc);  d.writeMicroseconds(vd);
  }
 
 void initRC(){
