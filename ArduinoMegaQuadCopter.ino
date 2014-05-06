@@ -29,6 +29,9 @@
 /**esc ve rc maksimum minimum değerleri**/
 #define MIN                    956  //kumanda da T1924956 mod
 #define MAX                    1924
+#define SMIN 				   1000 //servo writemicroseconds minimum
+#define SMAX				   2000 //maksimum
+#define ARM_DELAY 			   3000
 
 /* IMU endpoints and calibration with offsets */
 #define accXmax                79
@@ -37,7 +40,7 @@
 #define accYmin               -77
 #define accZmax                70
 #define accZmin               -70
-#define accZOffset            -102 // 102 daha çıkartabilmek için çünkü setoffset max -127 128
+#define accZOffset            -102 // 102 daha çıkartabilmek için çünkü setoffset max -127 ile 128 arası
 #define gyroXoffset            60
 #define gyroYoffset            11
 #define gyroZoffset           -4
@@ -46,11 +49,9 @@
 #define PITCH_P_VAL            0.5
 #define PITCH_I_VAL            0
 #define PITCH_D_VAL            1
-
 #define ROLL_P_VAL             2
 #define ROLL_I_VAL             5
 #define ROLL_D_VAL             1
- 
 #define YAW_P_VAL              2
 #define YAW_I_VAL              5
 #define YAW_D_VAL              1
@@ -80,25 +81,25 @@ Servo          a,b,c,d;
 
 /**********variables**************/
 int            velocity;
+float          bal_axes;
+float          bal_roll, bal_pitch;
 int            va, vb, vc, vd; // motor hızları
 int            v_ad, v_bc;
-float          bal_axes;
-float          bal_roll, ball_pitch;
 
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
 uint16_t       ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8;
 int32_t        lastMicros; //barometre için
 
-Quaternion     q;                          // quaternion for imu output
-VectorFloat    gravity;                   // gravity vector for ypr
-float          ypr[3]     = {0.0f, 0.0f, 0.0f};       // yaw pitch roll values
+Quaternion     q;
+VectorFloat    gravity;
+float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
 
 PID            yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT  );
-PID            pitchReg(&ypr[1], &ball_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, REVERSE );
-PID            rollReg (&ypr[2], &ball_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  REVERSE );
+PID            pitchReg(&ypr[1], &ball_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, DIRECT );
+PID            rollReg (&ypr[2], &ball_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  DIRECT );
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -109,15 +110,12 @@ unsigned long  rcLastChange6 = micros();
 unsigned long  rcLastChange7 = micros(); 
 unsigned long  rcLastChange8 = micros();
 
-
-
 void setup(){
   Wire.begin();
-  Serial.begin(57600); //only in debug delete it later
   Serial1.begin(38400); //GPS
-  initMotors();
-  initDOF();
   initRC();
+  initDOF();
+  initMotors();
   initRegulators();
   initBalancing();
  }
@@ -131,13 +129,76 @@ void loop(){
  
  }
 
+void getYPR(){}
+
+void computePID(){
+
+  acquireLock();
+
+  ch2 = map(ch2, MIN, MAX, PITCH_MIN, PITCH_MAX);
+  ch1 = map(ch1, MIN, MAX, ROLL_MIN, ROLL_MAX);
+  ch4 = map(ch4, MIN, MAX, YAW_MIN, YAW_MAX);
+  
+  if((ch2 < PITCH_MIN) || (ch2 > PITCH_MAX)) ch2 = ch2Last;
+  if((ch1 < ROLL_MIN) || (ch1 > ROLL_MAX)) ch1 = ch1Last;
+  if((ch4 < YAW_MIN) || (ch4 > YAW_MAX)) ch4 = ch4Last;
+  
+  ch1Last = ch1;
+  ch2Last = ch2;
+  ch4Last = ch4;
+  
+  ypr[0] = ypr[0] * 180/M_PI;
+  ypr[1] = ypr[1] * 180/M_PI;
+  ypr[2] = ypr[2] * 180/M_PI;
+  
+  
+  if(abs(ypr[0]-yprLast[0])>30) ypr[0] = yprLast[0];
+  if(abs(ypr[1]-yprLast[1])>30) ypr[1] = yprLast[1];
+  if(abs(ypr[2]-yprLast[2])>30) ypr[2] = yprLast[2];
+  
+
+  yprLast[0] = ypr[0];
+  yprLast[1] = ypr[1];
+  yprLast[2] = ypr[2];
+
+  pitchReg.Compute();
+  rollReg.Compute();
+  yawReg.Compute();
+  
+  releaseLock();
+
+ }
+
+void calculateVelocities(){
+
+  acquireLock();
+
+  velocity = map(ch3, MIN, MAX, SMIN, SMAX);
+  
+  releaseLock();
+
+  if((velocity < SMIN) || (velocity > SMAX)) velocity = velocityLast;
+  
+  velocityLast = velocity;
+  
+  v_ac = (abs(-100+bal_axes)/100)*velocity;
+  v_bd = ((100+bal_axes)/100)*velocity;
+  
+  va = ((100+bal_roll)/100)*v_ad;
+  vb = ((100+bal_pitch)/100)*v_bc;
+  
+  vc = (abs((-100+bal_roll)/100))*v_bc;
+  vd = (abs((-100+bal_pitch)/100))*v_ad;
+  
+ }
+
 void initBalancing(){
 
   bal_axes    = 0;
-  ball_roll   = 0;
-  ball_pitch  = 0;
+  bal_roll   = 0;
+  bal_pitch  = 0;
 
-}
+ }
 
 void initRegulators(){
 
@@ -150,7 +211,7 @@ void initRegulators(){
   yawReg.SetMode(AUTOMATIC);
   yawReg.SetOutputLimits(-PID_YAW_INFLUENCE, PID_YAW_INFLUENCE);
 
-}
+ }
 
 void initDOF(){
   acc.initialize();  boolean a = acc.testConnection();
@@ -170,7 +231,7 @@ void initMotors(){
   delay(100);
   a.writeMicroseconds(MIN); b.writeMicroseconds(MIN);
   c.writeMicroseconds(MIN); d.writeMicroseconds(MIN);
-  delay(1000);
+  delay(ARM_DELAY);
  }
 
 void updateMotors(){
