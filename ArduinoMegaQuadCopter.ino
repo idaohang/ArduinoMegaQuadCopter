@@ -27,8 +27,9 @@
 #define AUXCH4                 A8
 
 /**esc ve rc maksimum minimum değerleri**/
-#define MIN                    700 // 1180 1185 1195 altı 
-#define MAX                    2300 //?
+#define MIN                    956  //kumanda da T1924956 mod
+#define MAX                    1924
+
 /* IMU endpoints and calibration with offsets */
 #define accXmax                79
 #define accXmin               -79
@@ -42,29 +43,29 @@
 #define gyroZoffset           -4
 
 /*  PID configuration */
-#define PITCH_P_VAL 0.5
-#define PITCH_I_VAL 0
-#define PITCH_D_VAL 1
+#define PITCH_P_VAL            0.5
+#define PITCH_I_VAL            0
+#define PITCH_D_VAL            1
 
-#define ROLL_P_VAL 2
-#define ROLL_I_VAL 5
-#define ROLL_D_VAL 1
-
-#define YAW_P_VAL 2
-#define YAW_I_VAL 5
-#define YAW_D_VAL 1
+#define ROLL_P_VAL             2
+#define ROLL_I_VAL             5
+#define ROLL_D_VAL             1
+ 
+#define YAW_P_VAL              2
+#define YAW_I_VAL              5
+#define YAW_D_VAL              1
 
 
 /* Flight parameters */
-#define PITCH_MIN -30
-#define PITCH_MAX 30
-#define ROLL_MIN -30
-#define ROLL_MAX 30
-#define YAW_MIN -180
-#define YAW_MAX 180
-#define PID_PITCH_INFLUENCE 20
-#define PID_ROLL_INFLUENCE 20
-#define PID_YAW_INFLUENCE 20
+#define PITCH_MIN             -30
+#define PITCH_MAX              30
+#define ROLL_MIN              -30
+#define ROLL_MAX               30
+#define YAW_MIN               -180
+#define YAW_MAX                180
+#define PID_PITCH_INFLUENCE    20
+#define PID_ROLL_INFLUENCE     20
+#define PID_YAW_INFLUENCE      20
 
 /*********10DOF*******/
 ADXL345 acc;  int16_t ax, ay, az;
@@ -78,16 +79,26 @@ TinyGPSPlus gps;
 Servo          a,b,c,d;
 
 /**********variables**************/
-uint16_t       va, vb, vc, vd; // motor hızları
+int            velocity;
+int            va, vb, vc, vd; // motor hızları
+int            v_ad, v_bc;
+float          bal_axes;
+float          bal_roll, ball_pitch;
+
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
 uint16_t       ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8;
 int32_t        lastMicros; //barometre için
 
-Quaternion     q;                          // quaternion for mpu output
+Quaternion     q;                          // quaternion for imu output
 VectorFloat    gravity;                   // gravity vector for ypr
-float          ypr[3]     = {0.0f,0.0f,0.0f};       // yaw pitch roll values
+float          ypr[3]     = {0.0f, 0.0f, 0.0f};       // yaw pitch roll values
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
+
+
+PID            yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT  );
+PID            pitchReg(&ypr[1], &ball_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, REVERSE );
+PID            rollReg (&ypr[2], &ball_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  REVERSE );
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -102,79 +113,44 @@ unsigned long  rcLastChange8 = micros();
 
 void setup(){
   Wire.begin();
-  Serial.begin(57600);
+  Serial.begin(57600); //only in debug delete it later
   Serial1.begin(38400); //GPS
+  initMotors();
   initDOF();
   initRC();
-  initMotors();
+  initRegulators();
+  initBalancing();
  }
 
 void loop(){
-  Serial.print(ch1);
-  Serial.print("  ");
-  Serial.print(ch2);
-  Serial.print("  ");
-  Serial.print(ch3);
-  Serial.print("  ");
-  Serial.println(ch4);
-  delay(200);
-  /*
+ 
   getYPR();                          
   computePID();
   calculateVelocities();
   updateMotors();
-  */
+ 
  }
 
-void displayInfo(){
-  Serial.print(F("Location: ")); 
-  if (gps.location.isValid())
-  {
-    Serial.print(gps.location.lat(), 6);
-    Serial.print(F(","));
-    Serial.print(gps.location.lng(), 6);
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
+void initBalancing(){
 
-  Serial.print(F("  Date/Time: "));
-  if (gps.date.isValid())
-  {
-    Serial.print(gps.date.month());
-    Serial.print(F("/"));
-    Serial.print(gps.date.day());
-    Serial.print(F("/"));
-    Serial.print(gps.date.year());
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
+  bal_axes    = 0;
+  ball_roll   = 0;
+  ball_pitch  = 0;
 
-  Serial.print(F(" "));
-  if (gps.time.isValid())
-  {
-    if (gps.time.hour() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.hour());
-    Serial.print(F(":"));
-    if (gps.time.minute() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.minute());
-    Serial.print(F(":"));
-    if (gps.time.second() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.second());
-    Serial.print(F("."));
-    if (gps.time.centisecond() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.centisecond());
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
+}
 
-  Serial.println();
- }
+void initRegulators(){
+
+  pitchReg.SetMode(AUTOMATIC);
+  pitchReg.SetOutputLimits(-PID_PITCH_INFLUENCE, PID_PITCH_INFLUENCE);
+  
+  rollReg.SetMode(AUTOMATIC);
+  rollReg.SetOutputLimits(-PID_ROLL_INFLUENCE, PID_ROLL_INFLUENCE);
+  
+  yawReg.SetMode(AUTOMATIC);
+  yawReg.SetOutputLimits(-PID_YAW_INFLUENCE, PID_YAW_INFLUENCE);
+
+}
 
 void initDOF(){
   acc.initialize();  boolean a = acc.testConnection();
@@ -191,9 +167,10 @@ void initDOF(){
 void initMotors(){
   a.attach(SOL_ON_MOTOR_PINI);   b.attach(SAG_ON_MOTOR_PINI);
   c.attach(SOL_ARKA_MOTOR_PINI); d.attach(SAG_ARKA_MOTOR_PINI);
-  delay(10);
+  delay(100);
   a.writeMicroseconds(MIN); b.writeMicroseconds(MIN);
   c.writeMicroseconds(MIN); d.writeMicroseconds(MIN);
+  delay(1000);
  }
 
 void updateMotors(){
