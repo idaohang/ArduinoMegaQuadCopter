@@ -34,17 +34,17 @@
 #define ARM_DELAY 3000
 
 /* IMU endpoints and calibration with offsets */
-#define accXmax 79
-#define accXmin 79
-#define accYmax 77
-#define accYmin 77
-#define accZmax 70
-#define accZmin 70
+#define accXmax 154
+#define accXmin -162
+#define accYmax 156
+#define accYmin -152
+#define accZmax 141
+#define accZmin -141
 #define gyroXoffset 60
 #define gyroYoffset 11
 #define gyroZoffset -4
 
-#define accZOffset -102 // 102 daha çıkartabilmek için çünkü setoffset max -127 ile 128 arası
+#define accZOffset -204 
 
 /*  PID configuration */
 #define PITCH_P_VAL 0.5
@@ -82,14 +82,18 @@ Servo          a,b,c,d;
 
 /**********variables**************/
 int            velocity;
-float          bal_axes;
+float 	       velocityLast;
+
 float          bal_roll, bal_pitch;
+float          bal_axes;
+
 int            va, vb, vc, vd; // motor hızları
-int            v_ad, v_bc;
+int            v_roll, v_pitch;
+//int 		   v_ad, v_bc;
 
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
-float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8, velocityLast;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8;
 int32_t        lastMicros; //barometre için
 
 Quaternion     q;
@@ -98,7 +102,7 @@ float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
 
-PID yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
+PID yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,  YAW_I_VAL,   YAW_D_VAL,   DIRECT );
 PID pitchReg(&ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, DIRECT );
 PID rollReg (&ypr[2], &bal_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  DIRECT );
 
@@ -110,6 +114,8 @@ unsigned long  rcLastChange5 = micros();
 unsigned long  rcLastChange6 = micros(); 
 unsigned long  rcLastChange7 = micros(); 
 unsigned long  rcLastChange8 = micros();
+
+int xo=0, yo=0, zo=0;
 
 void setup(){
   Wire.begin();
@@ -123,16 +129,20 @@ void setup(){
  }
 
 void loop(){
- acc.getAcceleration(&ax, &ay, &az);
-
- Serial.print(ax);
- Serial.print("   ");
- Serial.print(ay);
-Serial.print("   ");
- Serial.println(az);
-
+  acc.getAcceleration(&ax,&ay,&az);
+  az+=accZOffset;
+    Serial.print(ax);
+   Serial.print("   ");
+   Serial.print(ay);
+   Serial.print("   ");
+   Serial.println(az);
+   
+   
  delay(300);
  /*
+ 
+ 
+ 
   getYPR();                          
   computePID();
   calcVel();
@@ -195,20 +205,20 @@ void calcVel(){
   
   velocityLast = velocity;
   
-  v_ac = (abs(-100+bal_axes)/100)*velocity;
-  v_bd = ((100+bal_axes)/100)*velocity;
+  v_roll = (abs(-100+bal_axes)/100)*velocity;
+  v_pitch = ((100+bal_axes)/100)*velocity;
   
-  va = ((100+bal_roll)/100)*v_ad;
-  vb = ((100+bal_pitch)/100)*v_bc;
+  va = ((100+bal_roll)/100)*v_roll;
+  vb = ((100+bal_pitch)/100)*v_pitch;
   
-  vc = (abs((-100+bal_roll)/100))*v_bc;
-  vd = (abs((-100+bal_pitch)/100))*v_ad;
+  vc = (abs((-100+bal_roll)/100))*v_roll;
+  vd = (abs((-100+bal_pitch)/100))*v_pitch;
   
  }
 
 void initBal(){
 
-  bal_axes    = 0;
+  bal_axes   = 0;
   bal_roll   = 0;
   bal_pitch  = 0;
 
@@ -228,9 +238,14 @@ void initReg(){
  }
 
 void initDOF(){
+  delay(1100);
   acc.initialize();  boolean a = acc.testConnection();
-  acc.setRange(2); // 8g hassasiyet
-  acc.setOffset(35,47,-127);
+  acc.setRange(1); // 8g hassasiyet
+  acc.setOffset(33,47,-127);
+  Serial.println(acc.getRange());
+  Serial.println(acc.getOffsetX());
+  Serial.println(acc.getOffsetY());
+  Serial.println(acc.getOffsetZ());
   baro.initialize(); boolean b = baro.testConnection();
   mag.initialize();  boolean m = mag.testConnection();
   gyro.initialize(); boolean g = gyro.testConnection();
@@ -265,7 +280,6 @@ void initRC(){
  }
 
 void kitle(){ interruptLock = true; } //interrupt locks
-
 void birak(){ interruptLock = false; }
 
 /*****Interrupt Service Routines ******/
@@ -334,3 +348,5 @@ void rcInterrupt8(){
   rcLastChange8 = micros();
  }
 /**************************************/
+
+
