@@ -11,62 +11,63 @@
 #include <Servo.h>
 
 /*****PIN Definitions**/
-#define SOL_ON_MOTOR_PINI      12 //3,5,6,9,10,11
-#define SAG_ON_MOTOR_PINI      6
-#define SOL_ARKA_MOTOR_PINI    9
-#define SAG_ARKA_MOTOR_PINI    3
+#define SOL_ON_MOTOR_PINI 12 //3,5,6,9,10,11
+#define SAG_ON_MOTOR_PINI 6
+#define SOL_ARKA_MOTOR_PINI 9
+#define SAG_ARKA_MOTOR_PINI 3
 
 /*****Receiver PINs**********8 channels*/
-#define Aileron_Roll_PIN       A15
-#define Elevator_Pitch_PIN     A14
-#define Throttle_PIN           A13
-#define Rudder_Yaw_PIN         A12
-#define AUXCH1                 A11
-#define AUXCH2                 A10
-#define AUXCH3                 A9
-#define AUXCH4                 A8
+#define Aileron_Roll_PIN A15
+#define Elevator_Pitch_PIN A14
+#define Throttle_PIN A13
+#define Rudder_Yaw_PIN A12
+#define AUXCH1 A11
+#define AUXCH2 A10
+#define AUXCH3 A9
+#define AUXCH4 A8
 
 /**esc ve rc maksimum minimum değerleri**/
-#define MIN                    956  //kumanda da T1924956 mod
-#define MAX                    1924
-#define SMIN 				   1000 //servo writemicroseconds minimum
-#define SMAX				   2000 //maksimum
-#define ARM_DELAY 			   3000
+#define MIN 956  //kumanda da T1924956 mod
+#define MAX 1924
+#define SMIN 1000 //servo writemicroseconds minimum
+#define SMAX 2000 //maksimum
+#define ARM_DELAY 3000
 
 /* IMU endpoints and calibration with offsets */
-#define accXmax                79
-#define accXmin               -79
-#define accYmax                77
-#define accYmin               -77
-#define accZmax                70
-#define accZmin               -70
-#define accZOffset            -102 // 102 daha çıkartabilmek için çünkü setoffset max -127 ile 128 arası
-#define gyroXoffset            60
-#define gyroYoffset            11
-#define gyroZoffset           -4
+#define accXmax 79
+#define accXmin 79
+#define accYmax 77
+#define accYmin 77
+#define accZmax 70
+#define accZmin 70
+#define gyroXoffset 60
+#define gyroYoffset 11
+#define gyroZoffset -4
+
+#define accZOffset -102 // 102 daha çıkartabilmek için çünkü setoffset max -127 ile 128 arası
 
 /*  PID configuration */
-#define PITCH_P_VAL            0.5
-#define PITCH_I_VAL            0
-#define PITCH_D_VAL            1
-#define ROLL_P_VAL             2
-#define ROLL_I_VAL             5
-#define ROLL_D_VAL             1
-#define YAW_P_VAL              2
-#define YAW_I_VAL              5
-#define YAW_D_VAL              1
+#define PITCH_P_VAL 0.5
+#define PITCH_I_VAL 0
+#define PITCH_D_VAL 1
+#define ROLL_P_VAL 2
+#define ROLL_I_VAL 5
+#define ROLL_D_VAL 1
+#define YAW_P_VAL 2
+#define YAW_I_VAL 5
+#define YAW_D_VAL 1
 
 
 /* Flight parameters */
-#define PITCH_MIN             -30
-#define PITCH_MAX              30
-#define ROLL_MIN              -30
-#define ROLL_MAX               30
-#define YAW_MIN               -180
-#define YAW_MAX                180
-#define PID_PITCH_INFLUENCE    20
-#define PID_ROLL_INFLUENCE     20
-#define PID_YAW_INFLUENCE      20
+#define PITCH_MIN -30
+#define PITCH_MAX 30
+#define ROLL_MIN -30
+#define ROLL_MAX 30
+#define YAW_MIN -180
+#define YAW_MAX 180
+#define PID_PITCH_INFLUENCE 20
+#define PID_ROLL_INFLUENCE 20
+#define PID_YAW_INFLUENCE 20
 
 /*********10DOF*******/
 ADXL345 acc;  int16_t ax, ay, az;
@@ -88,7 +89,7 @@ int            v_ad, v_bc;
 
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
-uint16_t       ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8, velocityLast;
 int32_t        lastMicros; //barometre için
 
 Quaternion     q;
@@ -97,9 +98,9 @@ float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
 
-PID            yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT  );
-PID            pitchReg(&ypr[1], &ball_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, DIRECT );
-PID            rollReg (&ypr[2], &ball_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  DIRECT );
+PID yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
+PID pitchReg(&ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, DIRECT );
+PID rollReg (&ypr[2], &bal_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  DIRECT );
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -113,27 +114,40 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400); //GPS
+  Serial.begin(115200);
   initRC();
   initDOF();
   initMotors();
-  initRegulators();
-  initBalancing();
+  initBal();
+  initReg();
  }
 
 void loop(){
- 
+ acc.getAcceleration(&ax, &ay, &az);
+
+ Serial.print(ax);
+ Serial.print("   ");
+ Serial.print(ay);
+Serial.print("   ");
+ Serial.println(az);
+
+ delay(300);
+ /*
   getYPR();                          
   computePID();
-  calculateVelocities();
+  calcVel();
   updateMotors();
- 
+ */
  }
 
-void getYPR(){}
+void getYPR(){
+
+
+ }
 
 void computePID(){
 
-  acquireLock();
+  kitle();
 
   ch2 = map(ch2, MIN, MAX, PITCH_MIN, PITCH_MAX);
   ch1 = map(ch1, MIN, MAX, ROLL_MIN, ROLL_MAX);
@@ -165,17 +179,17 @@ void computePID(){
   rollReg.Compute();
   yawReg.Compute();
   
-  releaseLock();
+  birak();
 
  }
 
-void calculateVelocities(){
+void calcVel(){
 
-  acquireLock();
+  kitle();
 
   velocity = map(ch3, MIN, MAX, SMIN, SMAX);
   
-  releaseLock();
+  birak();
 
   if((velocity < SMIN) || (velocity > SMAX)) velocity = velocityLast;
   
@@ -192,7 +206,7 @@ void calculateVelocities(){
   
  }
 
-void initBalancing(){
+void initBal(){
 
   bal_axes    = 0;
   bal_roll   = 0;
@@ -200,7 +214,7 @@ void initBalancing(){
 
  }
 
-void initRegulators(){
+void initReg(){
 
   pitchReg.SetMode(AUTOMATIC);
   pitchReg.SetOutputLimits(-PID_PITCH_INFLUENCE, PID_PITCH_INFLUENCE);
