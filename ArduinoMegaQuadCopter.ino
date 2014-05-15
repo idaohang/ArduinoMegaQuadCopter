@@ -1,4 +1,3 @@
-#include <helper_3dmath.h>
 #include <TinyGPS++.h>
 #include <PinChangeInt.h>
 #include <Wire.h>
@@ -9,6 +8,7 @@
 #include <BMP085.h>
 #include <ADXL345.h>
 #include <Servo.h>
+#include "math.h"
 
 /*****PIN Definitions**/
 #define SOL_ON_MOTOR_PINI 12 //3,5,6,9,10,11
@@ -40,9 +40,9 @@
 #define accYmin -152
 #define accZmax 141
 #define accZmin -141
-#define gyroXoffset 60
-#define gyroYoffset 11
-#define gyroZoffset -4
+#define gyroXoffset 33
+#define gyroYoffset 47
+#define gyroZoffset -127
 
 #define accZOffset -204 
 
@@ -69,6 +69,9 @@
 #define PID_ROLL_INFLUENCE 20
 #define PID_YAW_INFLUENCE 20
 
+
+#define SENS  0.0078128 // 8/1024
+
 /*********10DOF*******/
 ADXL345 acc;  int16_t ax, ay, az;
 BMP085 baro;  float temperature, pressure, altitude;
@@ -89,22 +92,22 @@ float          bal_axes;
 
 int            va, vb, vc, vd; // motor hızları
 int            v_roll, v_pitch;
-//int 		   v_ad, v_bc;
+int 		   v_ad, v_bc;
 
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
 float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8;
 int32_t        lastMicros; //barometre için
 
-Quaternion     q;
-VectorFloat    gravity;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
+float          Gx, Gy, Gz;
 
-PID yawReg  (&ypr[0], &bal_axes,   &ch4, YAW_P_VAL,  YAW_I_VAL,   YAW_D_VAL,   DIRECT );
-PID pitchReg(&ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, DIRECT );
-PID rollReg (&ypr[2], &bal_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  DIRECT );
+
+PID yawReg  (&ypr[0], &bal_axes,  &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
+PID pitchReg(&ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL, REVERSE);
+PID rollReg (&ypr[2], &bal_roll,  &ch1, ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,  REVERSE);
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -115,7 +118,7 @@ unsigned long  rcLastChange6 = micros();
 unsigned long  rcLastChange7 = micros(); 
 unsigned long  rcLastChange8 = micros();
 
-int xo=0, yo=0, zo=0;
+float artist;
 
 void setup(){
   Wire.begin();
@@ -129,30 +132,26 @@ void setup(){
  }
 
 void loop(){
-  acc.getAcceleration(&ax,&ay,&az);
-  az+=accZOffset;
-    Serial.print(ax);
-   Serial.print("   ");
-   Serial.print(ay);
-   Serial.print("   ");
-   Serial.println(az);
-   
-   
- delay(300);
- /*
- 
- 
- 
-  getYPR();                          
+  
+  getYPR();                   
   computePID();
   calcVel();
   updateMotors();
- */
+  
  }
 
 void getYPR(){
 
+    acc.getAcceleration(&ax,&ay,&az);
+    az+=accZOffset; //software calibration for z axis
 
+    Gx = SENS*ax;
+    Gy = SENS*ay;
+    Gz = SENS*az;
+
+    ypr[0] = 0; // yaw calculation
+    ypr[1] = atan( Gy / sqrt((Gx*Gx)+(Gz*Gz)));
+    ypr[2] = atan(-Gx / Gz);
  }
 
 void computePID(){
@@ -171,7 +170,7 @@ void computePID(){
   ch2Last = ch2;
   ch4Last = ch4;
   
-  ypr[0] = ypr[0] * 180/M_PI;
+  ypr[0] = ypr[0] * 180/M_PI; //Dereceye çevir
   ypr[1] = ypr[1] * 180/M_PI;
   ypr[2] = ypr[2] * 180/M_PI;
   
@@ -208,11 +207,11 @@ void calcVel(){
   v_roll = (abs(-100+bal_axes)/100)*velocity;
   v_pitch = ((100+bal_axes)/100)*velocity;
   
-  va = ((100+bal_roll)/100)*v_roll;
-  vb = ((100+bal_pitch)/100)*v_pitch;
+  va = ( ((100+bal_pitch)/100)*v_pitch			+		((100+bal_roll)/100)*v_roll			) /2;
+  vb = ( ((100+bal_pitch)/100)*v_pitch			+		(abs((-100+bal_roll)/100))*v_roll	) /2;
   
-  vc = (abs((-100+bal_roll)/100))*v_roll;
-  vd = (abs((-100+bal_pitch)/100))*v_pitch;
+  vc = ( (abs((-100+bal_pitch)/100))*v_pitch	+		((100+bal_roll)/100)*v_roll			) /2; 
+  vd = ( (abs((-100+bal_pitch)/100))*v_pitch	+		(abs((-100+bal_roll)/100))*v_roll	) /2;
   
  }
 
