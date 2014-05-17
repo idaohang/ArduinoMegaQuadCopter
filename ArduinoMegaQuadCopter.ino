@@ -33,17 +33,6 @@
 #define SMAX 2000 //maksimum
 #define ARM_DELAY 3000
 
-/* IMU endpoints and calibration with offsets */
-#define accXmax 154
-#define accXmin -162
-#define accYmax 156
-#define accYmin -152
-#define accZmax 141
-#define accZmin -141
-#define gyroXoffset 33
-#define gyroYoffset 47
-#define gyroZoffset -127
-
 #define accZOffset -204 
 
 /*  PID configuration */
@@ -69,8 +58,8 @@
 #define PID_ROLL_INFLUENCE 20
 #define PID_YAW_INFLUENCE 20
 
-
-#define SENS  0.0078128 // 8/1024
+#define SENS   s0.0078128 // 8/1024
+#define TODEG 57.2957795
 
 /*********10DOF*******/
 ADXL345 acc;  int16_t ax, ay, az;
@@ -91,8 +80,6 @@ float          bal_roll, bal_pitch;
 float          bal_axes;
 
 int            va, vb, vc, vd; // motor hızları
-int            v_roll, v_pitch;
-int 		   v_ad, v_bc;
 
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
@@ -103,6 +90,7 @@ float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 
 float          Gx, Gy, Gz;
+float		   deltaT = millis();
 
 
 PID yawReg  (&ypr[0], &bal_axes,  &ch4, YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
@@ -122,8 +110,7 @@ float artist;
 
 void setup(){
   Wire.begin();
-  Serial1.begin(38400); //GPS
-  Serial.begin(115200);
+  Serial1.begin(38400);
   initRC();
   initDOF();
   initMotors();
@@ -137,43 +124,48 @@ void loop(){
   computePID();
   calcVel();
   updateMotors();
-  
+
  }
 
 void getYPR(){
 
+	deltaT = millis() - deltaT;
     acc.getAcceleration(&ax,&ay,&az);
     az+=accZOffset; //software calibration for z axis
+
+    gyro.getRotation(&gx, &gy, &gz);
+    mag.getHeading(&mx, &my, &mz);
 
     Gx = SENS*ax;
     Gy = SENS*ay;
     Gz = SENS*az;
 
-    ypr[0] = 0; // yaw calculation
-    ypr[1] = atan( Gy / sqrt((Gx*Gx)+(Gz*Gz)));
-    ypr[2] = atan(-Gx / Gz);
+    ypr[0] = 0;
+    ypr[1] = atan( Gx / sqrt((Gy*Gy)+(Gz*Gz))) *TODEG;
+    ypr[2] = atan( Gy / sqrt((Gz*Gz)+(Gx*Gx))) *TODEG;
+
  }
 
 void computePID(){
 
   kitle();
 
+  ch1 = floor(ch1/RC_ROUNDING_BASE)*RC_ROUNDING_BASE;
+  ch2 = floor(ch2/RC_ROUNDING_BASE)*RC_ROUNDING_BASE;
+  ch4 = floor(ch4/RC_ROUNDING_BASE)*RC_ROUNDING_BASE;
+
+
   ch2 = map(ch2, MIN, MAX, PITCH_MIN, PITCH_MAX);
   ch1 = map(ch1, MIN, MAX, ROLL_MIN, ROLL_MAX);
   ch4 = map(ch4, MIN, MAX, YAW_MIN, YAW_MAX);
   
   if((ch2 < PITCH_MIN) || (ch2 > PITCH_MAX)) ch2 = ch2Last;
-  if((ch1 < ROLL_MIN) || (ch1 > ROLL_MAX)) ch1 = ch1Last;
-  if((ch4 < YAW_MIN) || (ch4 > YAW_MAX)) ch4 = ch4Last;
+  if((ch1 < ROLL_MIN)  || (ch1 > ROLL_MAX)) ch1 = ch1Last;
+  if((ch4 < YAW_MIN)   || (ch4 > YAW_MAX)) ch4 = ch4Last;
   
   ch1Last = ch1;
   ch2Last = ch2;
   ch4Last = ch4;
-  
-  ypr[0] = ypr[0] * 180/M_PI; //Dereceye çevir
-  ypr[1] = ypr[1] * 180/M_PI;
-  ypr[2] = ypr[2] * 180/M_PI;
-  
   
   if(abs(ypr[0]-yprLast[0])>30) ypr[0] = yprLast[0];
   if(abs(ypr[1]-yprLast[1])>30) ypr[1] = yprLast[1];
@@ -199,19 +191,14 @@ void calcVel(){
   velocity = map(ch3, MIN, MAX, SMIN, SMAX);
   
   birak();
-
-  if((velocity < SMIN) || (velocity > SMAX)) velocity = velocityLast;
   
   velocityLast = velocity;
+
+  va = ((((100+bal_pitch)/100)*velocity       +		((100+bal_roll)/100)*velocity)         /2 ) * ((100+bal_axes)/100);
+  vb = ((((100+bal_pitch)/100)*velocity			  +		(abs((-100+bal_roll)/100))*velocity)   /2 ) * (abs(-100+bal_axes)/100);
   
-  v_roll = (abs(-100+bal_axes)/100)*velocity;
-  v_pitch = ((100+bal_axes)/100)*velocity;
-  
-  va = ( ((100+bal_pitch)/100)*v_pitch			+		((100+bal_roll)/100)*v_roll			) /2;
-  vb = ( ((100+bal_pitch)/100)*v_pitch			+		(abs((-100+bal_roll)/100))*v_roll	) /2;
-  
-  vc = ( (abs((-100+bal_pitch)/100))*v_pitch	+		((100+bal_roll)/100)*v_roll			) /2; 
-  vd = ( (abs((-100+bal_pitch)/100))*v_pitch	+		(abs((-100+bal_roll)/100))*v_roll	) /2;
+  vc = (((abs((-100+bal_pitch)/100))*velocity	+		((100+bal_roll)/100)*velocity)         /2 ) * (abs(-100+bal_axes)/100); 
+  vd = (((abs((-100+bal_pitch)/100))*velocity	+		(abs((-100+bal_roll)/100))*velocity)   /2 ) * ((100+bal_axes)/100);
   
  }
 
@@ -239,12 +226,9 @@ void initReg(){
 void initDOF(){
   delay(1100);
   acc.initialize();  boolean a = acc.testConnection();
-  acc.setRange(1); // 8g hassasiyet
+  acc.setRange(1);
   acc.setOffset(33,47,-127);
-  Serial.println(acc.getRange());
-  Serial.println(acc.getOffsetX());
-  Serial.println(acc.getOffsetY());
-  Serial.println(acc.getOffsetZ());
+
   baro.initialize(); boolean b = baro.testConnection();
   mag.initialize();  boolean m = mag.testConnection();
   gyro.initialize(); boolean g = gyro.testConnection();
@@ -347,5 +331,3 @@ void rcInterrupt8(){
   rcLastChange8 = micros();
  }
 /**************************************/
-
-
