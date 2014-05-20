@@ -20,22 +20,23 @@
 #define Throttle_PIN A13 //3
 #define Rudder_Yaw_PIN A12 //4  /*#define AUXCH1 A11 #define AUXCH2 A10 #define AUXCH3 A9 #define AUXCH4 A8*/
 
-#define MIN 956  //kumanda da T1924956 mod
-#define MAX 1924
+#define ARM 950
+#define MIN 960  //kumanda da T1924956 mod
+#define MAX 1920
 #define SMIN 1000 //servo writemicroseconds minimum
 #define SMAX 2000 //maksimum
-#define ARM_DELAY 3000 //wait after arm 
+#define ARM_DELAY 8000 //wait after arm 
 #define accZOffset -204 
 
-#define PITCH_P_VAL 3
+#define PITCH_P_VAL 0.4
 #define PITCH_I_VAL 0
 #define PITCH_D_VAL 0
 
-#define ROLL_P_VAL 0
+#define ROLL_P_VAL 0.4
 #define ROLL_I_VAL 0
 #define ROLL_D_VAL 0
 
-#define YAW_P_VAL 0
+#define YAW_P_VAL 0.4
 #define YAW_I_VAL 0
 #define YAW_D_VAL 0
 
@@ -205,12 +206,12 @@ void calcVel(){
   vb = oranb * velocity;
   vc = oranc * velocity;
   vd = orand * velocity;
-/*
+
   Serial.print(va); Serial.print("\t");
   Serial.print(vb);    Serial.print("\t");
   Serial.print(vc);    Serial.print("\t");
   Serial.println(vd);
-*/
+
 /*
   Serial.print(va);Serial.print("\t");
   Serial.print(vb);Serial.print("\t");
@@ -243,8 +244,8 @@ void initMotors(){
   a.attach(SOL_ON_MOTOR_PINI);   b.attach(SAG_ON_MOTOR_PINI);
   c.attach(SOL_ARKA_MOTOR_PINI); d.attach(SAG_ARKA_MOTOR_PINI);
   delay(100);
-  a.writeMicroseconds(MIN); b.writeMicroseconds(MIN);
-  c.writeMicroseconds(MIN); d.writeMicroseconds(MIN);
+  a.writeMicroseconds(ARM); b.writeMicroseconds(ARM);
+  c.writeMicroseconds(ARM); d.writeMicroseconds(ARM);
   delay(ARM_DELAY);
  }
 void updateMotors(){
