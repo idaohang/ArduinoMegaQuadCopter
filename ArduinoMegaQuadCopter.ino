@@ -24,30 +24,31 @@
 #define MAX 1924
 #define SMIN 1000 //servo writemicroseconds minimum
 #define SMAX 2000 //maksimum
-#define ARM_DELAY 5000
+#define ARM_DELAY 3000 //wait after arm 
 #define accZOffset -204 
 
-#define PITCH_P_VAL 0.4
+#define PITCH_P_VAL 0.5
 #define PITCH_I_VAL 0
 #define PITCH_D_VAL 1
 
-#define ROLL_P_VAL 0.5
-#define ROLL_I_VAL 0
+#define ROLL_P_VAL 2
+#define ROLL_I_VAL 5
 #define ROLL_D_VAL 1
 
-#define YAW_P_VAL 0.1//2
-#define YAW_I_VAL 5//5
-#define YAW_D_VAL 0//1
+#define YAW_P_VAL 2
+#define YAW_I_VAL 5
+#define YAW_D_VAL 1
 
-#define PITCH_MIN -30
-#define PITCH_MAX 30
-#define ROLL_MIN -30
-#define ROLL_MAX 30
+#define PITCH_MIN -40
+#define PITCH_MAX 40
+#define ROLL_MIN -40
+#define ROLL_MAX 40
 #define YAW_MIN -180
 #define YAW_MAX 180
-#define PID_PITCH_INFLUENCE 20
-#define PID_ROLL_INFLUENCE 20
-#define PID_YAW_INFLUENCE 20
+#define PID_PITCH_INFLUENCE 40
+#define PID_ROLL_INFLUENCE 40
+#define PID_YAW_INFLUENCE 40
+#define TOTAL_INFLUENCE 120
 
 #define SENS   0.0078128 // 8/1024
 #define TODEG 57.2957795
@@ -62,15 +63,16 @@ Servo          a,b,c,d;
 
 int            velocity;
 float 	       velocityLast;
-float          bal_roll = 0, bal_pitch = 0, bal_axes = 0; // denge durumları +100 -100
+float          bal_roll = 0, bal_pitch = 0, bal_axes = 0; // +40 -40 total max 120 min -120
 int            va, vb, vc, vd; // motor hızları //1000-2000
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
 float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last;//, ch5, ch6, ch7, ch8;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
-float          Gx, Gy, Gz, Xh, Yh, t_roll, deltaT, gyroX, gyroY, gyroZ;
-
+float          Ax, Ay, Az, Xh, Yh, t_roll, deltaT, gyroX, gyroY, gyroZ;
+float          orana, oranb,oranc,orand, oranUst, oranAlt;
+float          yawOffset;
 
 PID yawReg  (&ypr[0], &bal_axes,  &ch4,   YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
 PID pitchReg(&ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL,   REVERSE);
@@ -83,49 +85,23 @@ unsigned long  rcLastChange4 = micros(); /*unsigned long  rcLastChange5 = micros
 
 void setup(){
   Wire.begin();
-  Serial.begin(57600);
   Serial1.begin(38400);
+  Serial.begin(57600);
   initRC();
   initDOF();
   initMotors();
   initReg();
+  getYPR();
+  yawOffset = ypr[0];
  }
 void loop(){
   
- /* kitle();
-  va=ch3;
-  vb=ch3;
-  vc=ch3;
-  vd=ch3;
-  birak();
-  updateMotors();
-  */
   getYPR();                   
   computePID();
   calcVel();
   updateMotors();
-  
-  Serial.print(ypr[0]);
-  Serial.print("   ");
-  Serial.print(ypr[1]);
-  Serial.print("   ");
-  Serial.print(ypr[2]);
-  Serial.print("   ");
-  Serial.print(va);
-  Serial.print("   ");
-  Serial.print(vb);
-  Serial.print("   ");
-  Serial.print(vc);
-  Serial.print("   ");
-  Serial.print(vd);
-  Serial.print("   ");
-  Serial.print(gyroX);
-  Serial.print("   ");
-  Serial.print(gyroY);
-  Serial.print("   ");
-  Serial.print(gyroZ);
-  Serial.print("   ");
-  
+  delay(500);
+
  }
 void getYPR(){
   
@@ -146,11 +122,12 @@ void getYPR(){
     Yh= mx*sin(ypr[2])*sin(ypr[1]) + my*cos(ypr[2]) - mz*sin(ypr[2])*cos(ypr[1]);
     ypr[0] = atan(Yh/Xh);
 
-    //Convert Radion YPR to Degree
-    ypr[0] = ypr[0] *TODEG;
+    //Convert Radion YPR values to Degree
+    ypr[0] = ypr[0] *TODEG - yawOffset;
     ypr[1] = ypr[1] *TODEG;
     ypr[2] = ypr[2] *TODEG;
 
+    Serial.println(ypr[0]);
     gyroX += (float)(gx / 14.375) * deltaT;
     gyroY += (float)(gy / 14.375) * deltaT;
     gyroZ += (float)(gz / 14.375) * deltaT;
@@ -164,19 +141,10 @@ void computePID(){
   ch1 = map(ch1, MIN, MAX, ROLL_MIN, ROLL_MAX);
   ch4 = map(ch4, MIN, MAX, YAW_MIN, YAW_MAX);
   
-  if((ch2 < PITCH_MIN) || (ch2 > PITCH_MAX)) ch2 = ch2Last;
-  if((ch1 < ROLL_MIN)  || (ch1 > ROLL_MAX))  ch1 = ch1Last;
-  if((ch4 < YAW_MIN)   || (ch4 > YAW_MAX)) ch4 = ch4Last;
-  
   ch1Last = ch1;
   ch2Last = ch2;
   ch4Last = ch4;
   
-  if(abs(ypr[0]-yprLast[0])>30) ypr[0] = yprLast[0];
-  if(abs(ypr[1]-yprLast[1])>30) ypr[1] = yprLast[1];
-  if(abs(ypr[2]-yprLast[2])>30) ypr[2] = yprLast[2];
-  
-
   yprLast[0] = ypr[0];
   yprLast[1] = ypr[1];
   yprLast[2] = ypr[2];
@@ -196,10 +164,29 @@ void calcVel(){
   
   velocityLast = velocity;
 
-  va = ((((100+bal_pitch)/100)*velocity         +		((100+bal_roll)/100)*velocity)         /2 ) * ((100+bal_axes)/100);
-  vb = ((((100+bal_pitch)/100)*velocity			+		(abs((-100+bal_roll)/100))*velocity)   /2 ) * (abs(-100+bal_axes)/100);
-  vc = (((abs((-100+bal_pitch)/100))*velocity	+		((100+bal_roll)/100)*velocity)         /2 ) * (abs(-100+bal_axes)/100); 
-  vd = (((abs((-100+bal_pitch)/100))*velocity	+		(abs((-100+bal_roll)/100))*velocity)   /2 ) * ((100+bal_axes)/100);
+  oranUst = (float)SMAX /(float)velocity;
+  oranAlt = (float)SMIN / (float)velocity;
+
+  orana = -bal_roll +bal_pitch + bal_axes;
+  Serial.print(orana);Serial.print("\t");
+  orana = (orana - (-TOTAL_INFLUENCE)) * (oranUst - oranAlt) / (TOTAL_INFLUENCE - (-TOTAL_INFLUENCE)) + oranAlt;
+
+  oranb = +bal_roll +bal_pitch - bal_axes;
+  Serial.print(oranb);Serial.print("\t");
+  oranb = (oranb - (-TOTAL_INFLUENCE)) * (oranUst - oranAlt) / (TOTAL_INFLUENCE - (-TOTAL_INFLUENCE)) + oranAlt;
+
+  oranc = -bal_roll -bal_pitch + bal_axes;
+  Serial.print(oranc);Serial.print("\t");
+  oranc = (oranc - (-TOTAL_INFLUENCE)) * (oranUst - oranAlt) / (TOTAL_INFLUENCE - (-TOTAL_INFLUENCE)) + oranAlt;
+
+  orand = +bal_roll -bal_pitch - bal_axes;
+  Serial.println(orand);
+  orand = (orand - (-TOTAL_INFLUENCE)) * (oranUst - oranAlt) / (TOTAL_INFLUENCE - (-TOTAL_INFLUENCE)) + oranAlt;
+
+  va = orana * velocity; 
+  vb = oranb * velocity;
+  vc = oranc * velocity;
+  vd = orand * velocity;
   
  }
 void initReg(){
