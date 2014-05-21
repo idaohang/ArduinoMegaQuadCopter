@@ -18,25 +18,28 @@
 #define Aileron_Roll_PIN A15 //1
 #define Elevator_Pitch_PIN A14 //2
 #define Throttle_PIN A13 //3
-#define Rudder_Yaw_PIN A12 //4  /*#define AUXCH1 A11 #define AUXCH2 A10 #define AUXCH3 A9 #define AUXCH4 A8*/
+#define Rudder_Yaw_PIN A12 //4  
+#define AUXCH1 A11 
+#define AUXCH2 A10 
+#define AUXCH3 A9 /*#define AUXCH4 A8*/
 
 #define ARM 950
 #define MIN 960  //kumanda da T1924956 mod
 #define MAX 1920
 #define SMIN 1000 //servo writemicroseconds minimum
 #define SMAX 2000 //maksimum
-#define ARM_DELAY 8000 //wait after arm 
+#define ARM_DELAY 9000 //wait after arm 
 #define accZOffset -204 
 
-#define PITCH_P_VAL 0.4
+#define PITCH_P_VAL 0.75
 #define PITCH_I_VAL 0
 #define PITCH_D_VAL 0
 
-#define ROLL_P_VAL 0.4
+#define ROLL_P_VAL 0.76
 #define ROLL_I_VAL 0
 #define ROLL_D_VAL 0
 
-#define YAW_P_VAL 0.4
+#define YAW_P_VAL 0.19
 #define YAW_I_VAL 0
 #define YAW_D_VAL 0
 
@@ -68,7 +71,7 @@ float          bal_roll = 0, bal_pitch = 0, bal_axes = 0;
 int            va, vb, vc, vd; // motor hızları //1000-2000
 float          ctrl; //rc dğer kontrol
 boolean        interruptLock = false;
-float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last;//, ch5, ch6, ch7, ch8;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7;//, ch8;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f};
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          c_ypr[3]     = {0.0f, 0.0f, 0.0f};
@@ -83,7 +86,10 @@ PID rollReg (&c_ypr[2], &bal_roll,  &ch1,  ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
 unsigned long  rcLastChange3 = micros();
-unsigned long  rcLastChange4 = micros(); /*unsigned long  rcLastChange5 = micros(); unsigned long  rcLastChange6 = micros(); unsigned long  rcLastChange7 = micros(); unsigned long  rcLastChange8 = micros();*/
+unsigned long  rcLastChange4 = micros(); 
+unsigned long  rcLastChange5 = micros(); 
+unsigned long  rcLastChange6 = micros(); 
+unsigned long  rcLastChange7 = micros();/* unsigned long  rcLastChange8 = micros();*/
 
 void setup(){
   Wire.begin();
@@ -101,6 +107,7 @@ void loop(){
   computePID();
   calcVel();
   updateMotors();
+
 
  }
 void getYPR(){
@@ -196,10 +203,10 @@ void calcVel(){
   oranb = +bal_roll +bal_pitch - bal_axes;
   oranb = (oranb + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
 
-  oranc = -bal_roll -bal_pitch + bal_axes;
+  oranc = -bal_roll -bal_pitch - bal_axes;
   oranc = (oranc + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
 
-  orand = +bal_roll -bal_pitch - bal_axes;
+  orand = +bal_roll -bal_pitch + bal_axes;
   orand = (orand + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
 
   va = orana * velocity; 
@@ -257,10 +264,10 @@ void initRC(){
   PCintPort::attachInterrupt(Elevator_Pitch_PIN, rcInterrupt2,   CHANGE);
   PCintPort::attachInterrupt(Throttle_PIN,       rcInterrupt3,   CHANGE);
   PCintPort::attachInterrupt(Rudder_Yaw_PIN,     rcInterrupt4,   CHANGE); 
-  /*PCintPort::attachInterrupt(AUXCH1,             rcInterrupt5,   CHANGE); 
+  PCintPort::attachInterrupt(AUXCH1,             rcInterrupt5,   CHANGE); 
   PCintPort::attachInterrupt(AUXCH2,             rcInterrupt6,   CHANGE); 
   PCintPort::attachInterrupt(AUXCH3,             rcInterrupt7,   CHANGE); 
-  PCintPort::attachInterrupt(AUXCH4,             rcInterrupt8,   CHANGE);*/
+  /*PCintPort::attachInterrupt(AUXCH4,             rcInterrupt8,   CHANGE);*/
  }
  
  void initFilter()
@@ -305,7 +312,7 @@ void rcInterrupt4(){
     if(ctrl<MAX) ch4 = ctrl;
   }
   rcLastChange4 = micros();
- }/*
+ }
 void rcInterrupt5(){
   if(!interruptLock)
   {
@@ -330,6 +337,7 @@ void rcInterrupt7(){
   }
   rcLastChange7 = micros();
  }
+ /*
 void rcInterrupt8(){
   if(!interruptLock)
   {
