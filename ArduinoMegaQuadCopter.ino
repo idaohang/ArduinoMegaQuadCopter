@@ -10,26 +10,40 @@
 #include <Servo.h>
 #include "math.h"
 
-#define SOL_ON_MOTOR_PINI 12 //3,5,6,9,10,11
+#define SOL_ON_MOTOR_PINI 12
 #define SAG_ON_MOTOR_PINI 6
 #define SOL_ARKA_MOTOR_PINI 9
 #define SAG_ARKA_MOTOR_PINI 3
 
-#define Aileron_Roll_PIN A15 //1
-#define Elevator_Pitch_PIN A14 //2
-#define Throttle_PIN A13 //3
-#define Rudder_Yaw_PIN A12 //4  
+#define Aileron_Roll_PIN A15 //ch1
+#define Elevator_Pitch_PIN A14 //ch2
+#define Throttle_PIN A13 //ch3
+#define Rudder_Yaw_PIN A12 //ch4  
 #define AUXCH1 A11 
 #define AUXCH2 A10 
 #define AUXCH3 A9 
 #define AUXCH4 A8
 
-#define ARM 950
-#define MIN 960  //kumanda da T1924956 mod
-#define MAX 1920
+#define ARM 950 //calibration neyle yaptıysan dikkat
+#define CH1_MIN 960
+#define CH1_MAX 1920
+#define CH2_MIN 960
+#define CH2_MAX 1920
+#define CH3_MIN 960
+#define CH3_MAX 1920
+#define CH4_MIN 960
+#define CH4_MAX 1920
+#define CH5_MIN 1028
+#define CH5_MAX 1844
+#define CH6_MIN 1028
+#define CH6_MAX 1844
+#define CH7_MIN 1012
+#define CH7_MAX 1844
+#define CH8_MIN 1012
+#define CH8_MAX 1844
 #define SMIN 1000 //servo writemicroseconds minimum
 #define SMAX 2000 //maksimum
-#define ARM_DELAY 10000 //wait after arm 
+#define ARM_DELAY 10000 //wait after arm 10 SECONDS
 #define accZOffset -204 
 /*
 #define PITCH_P_VAL 0
@@ -59,13 +73,11 @@ float YAW_D_VAL=0;
 #define PITCH_MAX 30
 #define ROLL_MIN -30
 #define ROLL_MAX 30
-#define YAW_MIN -180
-#define YAW_MAX 180
+#define YAW_MIN -60
+#define YAW_MAX 60
 #define PID_PITCH_INFLUENCE 20
 #define PID_ROLL_INFLUENCE 20
 #define PID_YAW_INFLUENCE 20
-
-//#define TOTAL_INFLUENCE 60
 
 #define SENS   0.0078128 // =8/1024
 #define TODEG 57.2957795
@@ -78,24 +90,23 @@ ITG3200 gyro; int16_t gx, gy, gz;
 TinyGPSPlus    gps;
 Servo          a,b,c,d;
 
-float          velocity;
-float 	       velocityLast;
+float          velocity, velocityLast;
 float          bal_roll = 0, bal_pitch = 0, bal_axes = 0;
 int            va, vb, vc, vd; // motor hızları //1000-2000
-float          ctrl; //rc dğer kontrol
+float          ctrl; //rc dğer kontrol <MIN >MAX
 boolean        interruptLock = false;
 float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8;
-float          ypr[3]     = {0.0f, 0.0f, 0.0f};
+float          ypr[3]     = {0.0f, 0.0f, 0.0f}; //Acc
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
-float          c_ypr[3]   = {0.0f, 0.0f, 0.0f};
+float          c_ypr[3]   = {0.0f, 0.0f, 0.0f}; //Complimentary with 0.98
 float	       c_yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          Ax, Ay, Az, Xh, Yh, t_roll, t_pitch, deltaT, gyroX, gyroY, gyroZ;
 float          orana, oranb,oranc,orand, oranUst, oranAlt;
-float          yawOffset;
+float          yawOffset = 0, tch1, tch2, tch3, tch4;
 
-PID yawReg  (&c_ypr[0], &bal_axes,  &ch4,   YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
-PID pitchReg(&c_ypr[1], &bal_pitch, &ch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL,   REVERSE);
-PID rollReg (&c_ypr[2], &bal_roll,  &ch1,  ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,   REVERSE);
+PID yawReg  (&c_ypr[0], &bal_axes,  &tch4,   YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
+PID pitchReg(&c_ypr[1], &bal_pitch, &tch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL,   REVERSE);
+PID rollReg (&c_ypr[2], &bal_roll,  &tch1,  ROLL_P_VAL,  ROLL_I_VAL,  ROLL_D_VAL,   REVERSE);
 
 unsigned long  rcLastChange1 = micros();
 unsigned long  rcLastChange2 = micros();
@@ -118,14 +129,14 @@ void setup(){
  }
 void loop(){
   
-  getYPR();                   
+  getYPR();
   computePID();
   calcVel();
   updateMotors();
-  
+
  }
 void getYPR(){
-  
+
     acc.getAcceleration(&ax,&ay,&az); az+=accZOffset; //software calibration for z axis
     gyro.getRotation(&gx, &gy, &gz);  gx+=61; gy+=11; gz-=5;
     mag.getHeading(&mx, &my, &mz);
@@ -156,22 +167,21 @@ void getYPR(){
     c_ypr[0] = 0.98*(c_ypr[0]+gyroZ) + 0.02*ypr[0]; 
     c_ypr[1] = 0.98*(c_ypr[1]+gyroY) + 0.02*ypr[1];
     c_ypr[2] = 0.98*(c_ypr[2]+gyroX) + 0.02*ypr[2];
+
  }
 void computePID(){
-
-  kitle();
-
-  ch2 = fmap(ch2, MIN, MAX, PITCH_MIN, PITCH_MAX);
-  ch1 = fmap(ch1, MIN, MAX, ROLL_MIN, ROLL_MAX);
-  ch4 = fmap(ch4, MIN, MAX, YAW_MIN, YAW_MAX);
-
-  if((ch2 < PITCH_MIN) || (ch2 > PITCH_MAX)) ch2 = ch2Last;
-  if((ch1 < ROLL_MIN)  || (ch1 > ROLL_MAX))  ch1 = ch1Last;
-  if((ch4 < YAW_MIN)   || (ch4 > YAW_MAX))   ch4 = ch4Last;
+	
+  tch1 = ch1;
+  tch2 = ch2;
+  tch4 = ch4;
+ 
+  tch2 = fmap(tch2, CH2_MIN, CH2_MAX, PITCH_MIN, PITCH_MAX);
+  tch1 = fmap(tch1, CH1_MIN, CH1_MAX, ROLL_MIN, ROLL_MAX);
+  tch4 = fmap(tch4, CH4_MIN, CH4_MAX, YAW_MIN, YAW_MAX);
   
-  ch1Last = ch1;
-  ch2Last = ch2;
-  ch4Last = ch4;
+  ch1Last = tch1;
+  ch2Last = tch2;
+  ch4Last = tch4;
   
   yprLast[0] = ypr[0];
   yprLast[1] = ypr[1];
@@ -181,31 +191,33 @@ void computePID(){
   c_yprLast[1] = c_ypr[1];
   c_yprLast[2] = c_ypr[2];
 
+  PITCH_P_VAL = fmap(ch5, CH5_MIN, CH5_MAX, 0, 0.5);
+  PITCH_I_VAL = fmap(ch6, CH6_MIN, CH6_MAX, 0, 0.5);
+  PITCH_P_VAL = fmap(ch7, CH7_MIN, CH7_MAX, 0, 0.5);
+  
+  pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
+  
   pitchReg.Compute();
   rollReg.Compute();
   yawReg.Compute();
-  
-  birak();
 
  }
 void calcVel(){
 
-  kitle();
-  
-  velocity = fmap(ch3, MIN, MAX, SMIN, SMAX);
-  
-  birak();
+  tch3 = ch3;
+  velocity = fmap(tch3, CH3_MIN, CH3_MAX, SMIN, SMAX);
   
   if((velocity < SMIN) || (velocity > SMAX)) velocity = velocityLast;
 
   velocityLast = velocity;
-/*
-  va = velocity + bal_pitch - bal_roll;
-  vb = velocity + bal_pitch + bal_roll;
 
-  vc = velocity - bal_pitch - bal_roll;
-  vd = velocity - bal_pitch + bal_roll;
- */
+  va = velocity + bal_pitch - bal_roll - bal_axes;
+  vb = velocity + bal_pitch + bal_roll + bal_axes;
+
+  vc = velocity - bal_pitch - bal_roll + bal_axes;
+  vd = velocity - bal_pitch + bal_roll - bal_axes;
+
+/*
 
   vb = ( ((100+bal_pitch)/100)*velocity   +   ((100+bal_roll)/100)*velocity     ) /2;
   va = ( ((100+bal_pitch)/100)*velocity   +   (abs((-100+bal_roll)/100))*velocity ) /2;
@@ -213,34 +225,34 @@ void calcVel(){
   vd = ( (abs((-100+bal_pitch)/100))*velocity +   ((100+bal_roll)/100)*velocity   ) /2; 
   vc = ( (abs((-100+bal_pitch)/100))*velocity +   (abs((-100+bal_roll)/100))*velocity ) /2;
 
-  /*
+  
   //oranUst = (float)SMAX /(float)velocity;
-  oranUst = 1.34;
+  oranUst = (float)4/3; //
   //oranAlt = (float)SMIN / (float)velocity;
-  oranAlt = 0.67;
+  oranAlt = (float)2/3; //
 
   orana = -bal_roll +bal_pitch + bal_axes;
-  orana = (orana + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
-
+  orana = fmap(orana, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
+  
   oranb = +bal_roll +bal_pitch - bal_axes;
-  oranb = (oranb + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
+  oranb = fmap(oranb, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
 
   oranc = -bal_roll -bal_pitch - bal_axes;
-  oranc = (oranc + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
+  oranc = fmap(oranc, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
 
   orand = +bal_roll -bal_pitch + bal_axes;
-  orand = (orand + TOTAL_INFLUENCE) * (oranUst - oranAlt) / (TOTAL_INFLUENCE + TOTAL_INFLUENCE) + oranAlt;
+  orand = fmap(orand, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
+
 
   va = orana * velocity; 
   vb = oranb * velocity;
   vc = oranc * velocity;
   vd = orand * velocity;
-
-  Serial.print(va); Serial.print("\t");
-  Serial.print(vb);    Serial.print("\t");
-  Serial.print(vc);    Serial.print("\t");
+*/
+  Serial.print(va);Serial.print("\t");
+  Serial.print(vb);Serial.print("\t");
+  Serial.print(vc);Serial.print("\t");
   Serial.println(vd);
-  */
  }
 void initReg(){
 
@@ -300,7 +312,7 @@ void rcInterrupt1(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange1;
-    if(ctrl<MAX) ch1 = ctrl;
+    if(ctrl<=CH1_MAX && ctrl>=CH1_MIN) ch1 = ctrl;
   }
   rcLastChange1 = micros();
  }
@@ -308,7 +320,7 @@ void rcInterrupt2(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange2;
-    if(ctrl<MAX) ch2 = ctrl;
+    if(ctrl<=CH2_MAX && ctrl>=CH2_MIN) ch2 = ctrl;
   }
   rcLastChange2 = micros();
  }
@@ -316,7 +328,7 @@ void rcInterrupt3(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange3;
-    if(ctrl<MAX) ch3 = ctrl;
+    if(ctrl<=CH3_MAX && ctrl>=CH3_MIN) ch3 = ctrl;
   }
   rcLastChange3 = micros();
  }
@@ -324,7 +336,7 @@ void rcInterrupt4(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange4;
-    if(ctrl<MAX) ch4 = ctrl;
+    if(ctrl<=CH4_MAX && ctrl>=CH4_MIN) ch4 = ctrl;
   }
   rcLastChange4 = micros();
  }
@@ -332,7 +344,7 @@ void rcInterrupt5(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange5;
-    if(ctrl<MAX) ch5 = ctrl;
+    if(ctrl<=CH5_MAX && ctrl>=CH5_MIN) ch5 = ctrl;
   }
   rcLastChange5 = micros();
  }
@@ -340,7 +352,7 @@ void rcInterrupt6(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange6;
-    if(ctrl<MAX) ch6 = ctrl;
+    if(ctrl<=CH6_MAX && ctrl>=CH6_MIN) ch6 = ctrl;
   }
   rcLastChange6 = micros();
  }
@@ -348,7 +360,7 @@ void rcInterrupt7(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange7;
-    if(ctrl<MAX) ch7 = ctrl;
+    if(ctrl<=CH7_MAX && ctrl>=CH7_MIN) ch7 = ctrl;
   }
   rcLastChange7 = micros();
  }
@@ -356,7 +368,7 @@ void rcInterrupt8(){
   if(!interruptLock)
   {
     ctrl = micros() - rcLastChange8;
-    if(ctrl<MAX) ch8 = ctrl;
+    if(ctrl<=CH8_MAX && ctrl>=CH8_MIN) ch8 = ctrl;
   }
   rcLastChange8 = micros();
  }
