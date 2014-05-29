@@ -120,7 +120,7 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400);
-  Serial.begin(57600);
+  //Serial.begin(57600);
   initRC();
   initDOF();
   initMotors();
@@ -134,7 +134,7 @@ void loop(){
   calcVel();
   updateMotors();
   
-  Serial.print(va);Serial.print("\t");
+  /*Serial.print(va);Serial.print("\t");
     Serial.print(vb);Serial.print("\t");
     Serial.print(vc);Serial.print("\t");
     Serial.print(vd);Serial.print("\t\t");
@@ -158,7 +158,7 @@ void loop(){
 
     Serial.print(ypr[0]);Serial.print("\t");
     Serial.print(ypr[1]);Serial.print("\t");
-    Serial.println(ypr[2]);
+    Serial.println(ypr[2]);*/
 
  }
 void getYPR(){
