@@ -95,7 +95,7 @@ float          bal_roll = 0.0f, bal_pitch = 0.0f, bal_axes = 0.0f;
 int            va, vb, vc, vd; // motor hızları //1000-2000
 float          ctrl; //rc dğer kontrol <MIN >MAX
 boolean        interruptLock = false;
-float          ch1, ch1Last, ch2, ch2Last, ch3, ch3Last ch4, ch4Last, ch5, ch6, ch7, ch8;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch3Last, ch4, ch4Last, ch5, ch6, ch7, ch8;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f}; //Acc
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          c_ypr[3]   = {0.0f, 0.0f, 0.0f}; //Complimentary with 0.98
@@ -120,7 +120,7 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400);
-  //Serial.begin(57600);
+  Serial.begin(57600);
   initRC();
   initDOF();
   initMotors();
@@ -134,7 +134,7 @@ void loop(){
   calcVel();
   updateMotors();
   
-/*  Serial.print(va);Serial.print("\t");
+  Serial.print(va);Serial.print("\t");
     Serial.print(vb);Serial.print("\t");
     Serial.print(vc);Serial.print("\t");
     Serial.print(vd);Serial.print("\t\t");
@@ -159,7 +159,7 @@ void loop(){
     Serial.print(ypr[0]);Serial.print("\t");
     Serial.print(ypr[1]);Serial.print("\t");
     Serial.println(ypr[2]);
-*/
+
  }
 void getYPR(){
 
@@ -197,7 +197,7 @@ void getYPR(){
  }
 void computePID(){
 	
-  tch1 = ch1;
+  lock();	tch1 = ch1; release();
   if(tch1 < CH1_MIN || tch1 > CH1_MAX){
 	tch1 = ch1Last;
   }
@@ -206,7 +206,7 @@ void computePID(){
   	ch1Last = tch1;
   }
 
-  tch2 = ch2;
+  lock(); tch2 = ch2; release();
   if(tch2 < CH2_MIN || tch2 > CH2_MAX){
   	tch2 = ch2Last;
   }
@@ -215,7 +215,7 @@ void computePID(){
   	ch2Last = tch2;
   }
 
-  tch4 = ch4;
+  lock(); tch4 = ch4; release();
   if (tch4 < CH4_MIN || tch4 > CH4_MAX){
   	tch4 = ch4Last;
   }
@@ -237,7 +237,7 @@ void computePID(){
   PITCH_D_VAL=ROLL_D_VAL = fmap(ch7,CH7_MIN, CH7_MAX,0, 0.4 );
   
   rollReg.SetTunings(ROLL_P_VAL, ROLL_I_VAL, ROLL_D_VAL);
-  //pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
+  pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
 
   pitchReg.Compute();
   rollReg.Compute();
@@ -246,8 +246,8 @@ void computePID(){
  }
 void calcVel(){
 
-  tch3 = ch3;
-  if (tch3 < CH3_MIN || tch3 < CH3_MAX)
+  lock(); tch3 = ch3; release();
+  if (tch3 < CH3_MIN || tch3 > CH3_MAX)
   {
   	velocity = velocityLast;
   }
@@ -348,62 +348,71 @@ void initFilter(){
     c_ypr[1] = ypr[1];
     c_ypr[2] = ypr[2];
  }
-
+void lock(){ interruptLock = true;}
+void release(){ interruptLock = false;}
 /*****Interrupt Service Routines ******/
 void rcInterrupt1(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange1;
     if(ctrl<=CH1_MAX && ctrl>=CH1_MIN) ch1 = ctrl;
-  
+  }
   rcLastChange1 = micros();
  }
 void rcInterrupt2(){
- 
+ if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange2;
     if(ctrl<=CH2_MAX && ctrl>=CH2_MIN) ch2 = ctrl;
-  
+  }
   rcLastChange2 = micros();
  }
 void rcInterrupt3(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange3;
     if(ctrl<=CH3_MAX && ctrl>=CH3_MIN) ch3 = ctrl;
-  
+  }
   rcLastChange3 = micros();
  }
 void rcInterrupt4(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange4;
     if(ctrl<=CH4_MAX && ctrl>=CH4_MIN) ch4 = ctrl;
-  
+  }
   rcLastChange4 = micros();
  }
 void rcInterrupt5(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange5;
     if(ctrl<=CH5_MAX && ctrl>=CH5_MIN) ch5 = ctrl;
-  
+  }
   rcLastChange5 = micros();
  }
 void rcInterrupt6(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange6;
     if(ctrl<=CH6_MAX && ctrl>=CH6_MIN) ch6 = ctrl;
-  
+  }
   rcLastChange6 = micros();
  }
 void rcInterrupt7(){
- 
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange7;
     if(ctrl<=CH7_MAX && ctrl>=CH7_MIN) ch7 = ctrl;
-  
+  }
   rcLastChange7 = micros();
  }
 void rcInterrupt8(){
-  
+  if (!interruptLock)
+  {
     ctrl = micros() - rcLastChange8;
     if(ctrl<=CH8_MAX && ctrl>=CH8_MIN) ch8 = ctrl;
-  
+  }
   rcLastChange8 = micros();
  }
 /***********custom functions******************/
