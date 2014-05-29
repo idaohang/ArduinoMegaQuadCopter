@@ -45,14 +45,18 @@
 #define SMAX 2000 //maksimum
 #define ARM_DELAY 10000 //wait after arm 10 SECONDS
 #define accZOffset -204 
-/*
-#define PITCH_P_VAL 0
+
+/*#define PITCH_P_VAL 0
 #define PITCH_I_VAL 0
 #define PITCH_D_VAL 0
-/*
-#define ROLL_P_VAL 0
+
+#define ROLL_P_VAL 0.25
 #define ROLL_I_VAL 0
-#define ROLL_D_VAL 0*/
+#define ROLL_D_VAL 0
+
+#define YAW_P_VAL 0
+#define YAW_I_VAL 0
+#define YAW_D_VAL 0 */
 float PITCH_P_VAL=0;
 float PITCH_I_VAL=0;
 float PITCH_D_VAL=0;
@@ -64,10 +68,6 @@ float ROLL_D_VAL=0;
 float YAW_P_VAL=0;
 float YAW_I_VAL=0;
 float YAW_D_VAL=0;
-/*
-#define YAW_P_VAL 0
-#define YAW_I_VAL 0
-#define YAW_D_VAL 0*/
 
 #define PITCH_MIN -30
 #define PITCH_MAX 30
@@ -79,8 +79,8 @@ float YAW_D_VAL=0;
 #define PID_ROLL_INFLUENCE 20
 #define PID_YAW_INFLUENCE 20
 
-#define SENS   0.0078128 // =8/1024
-#define TODEG 57.2957795
+#define SENS   0.0078125 // =8/1024
+//#define TODEG 57.2957795 there already exist RAD_TO_DEG no need for this
 
 ADXL345 acc;  int16_t ax, ay, az;
 BMP085 baro;  float temperature, pressure, altitude;
@@ -91,11 +91,11 @@ TinyGPSPlus    gps;
 Servo          a,b,c,d;
 
 float          velocity, velocityLast;
-float          bal_roll = 0, bal_pitch = 0, bal_axes = 0;
+float          bal_roll = 0.0f, bal_pitch = 0.0f, bal_axes = 0.0f;
 int            va, vb, vc, vd; // motor hızları //1000-2000
 float          ctrl; //rc dğer kontrol <MIN >MAX
 boolean        interruptLock = false;
-float          ch1, ch1Last, ch2, ch2Last, ch3, ch4, ch4Last, ch5, ch6, ch7, ch8;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch3Last ch4, ch4Last, ch5, ch6, ch7, ch8;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f}; //Acc
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          c_ypr[3]   = {0.0f, 0.0f, 0.0f}; //Complimentary with 0.98
@@ -120,7 +120,7 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400);
-  Serial.begin(57600);
+  //Serial.begin(57600);
   initRC();
   initDOF();
   initMotors();
@@ -133,7 +133,33 @@ void loop(){
   computePID();
   calcVel();
   updateMotors();
+  
+/*  Serial.print(va);Serial.print("\t");
+    Serial.print(vb);Serial.print("\t");
+    Serial.print(vc);Serial.print("\t");
+    Serial.print(vd);Serial.print("\t\t");
+    
+    Serial.print(PITCH_P_VAL);Serial.print("\t");
+    Serial.print(PITCH_I_VAL);Serial.print("\t");
+    Serial.print(PITCH_D_VAL);Serial.print("\t\t");
 
+    Serial.print(ROLL_P_VAL);Serial.print("\t");
+    Serial.print(ROLL_I_VAL);Serial.print("\t");
+    Serial.print(ROLL_D_VAL);Serial.print("\t\t");
+
+    Serial.print(bal_axes);Serial.print("\t");
+    Serial.print(bal_pitch);Serial.print("\t");
+    Serial.print(bal_roll);Serial.print("\t\t");
+
+
+    Serial.print(c_ypr[0]);Serial.print("\t");
+    Serial.print(c_ypr[1]);Serial.print("\t");
+    Serial.print(c_ypr[2]);Serial.print("\t\t");
+
+    Serial.print(ypr[0]);Serial.print("\t");
+    Serial.print(ypr[1]);Serial.print("\t");
+    Serial.println(ypr[2]);
+*/
  }
 void getYPR(){
 
@@ -156,9 +182,9 @@ void getYPR(){
     ypr[0] = atan(Yh/Xh);
 
     //Convert Radion YPR values to Degree
-    ypr[0] = ypr[0] *TODEG - yawOffset;
-    ypr[1] = ypr[1] *TODEG;
-    ypr[2] = ypr[2] *TODEG;
+    ypr[0] = ypr[0] * RAD_TO_DEG - yawOffset;
+    ypr[1] = ypr[1] * RAD_TO_DEG;
+    ypr[2] = ypr[2] * RAD_TO_DEG;
 
     gyroY = (float)(gy / 14.375) * deltaT;
     gyroX = (float)(gx / 14.375) * deltaT;
@@ -172,16 +198,31 @@ void getYPR(){
 void computePID(){
 	
   tch1 = ch1;
+  if(tch1 < CH1_MIN || tch1 > CH1_MAX){
+	tch1 = ch1Last;
+  }
+  else{
+  	tch1 = fmap(tch1, CH1_MIN, CH1_MAX, ROLL_MIN, ROLL_MAX);
+  	ch1Last = tch1;
+  }
+
   tch2 = ch2;
+  if(tch2 < CH2_MIN || tch2 > CH2_MAX){
+  	tch2 = ch2Last;
+  }
+  else{
+  	tch2 = fmap(tch2, CH2_MIN, CH2_MAX, PITCH_MIN, PITCH_MAX);
+  	ch2Last = tch2;
+  }
+
   tch4 = ch4;
- 
-  tch2 = fmap(tch2, CH2_MIN, CH2_MAX, PITCH_MIN, PITCH_MAX);
-  tch1 = fmap(tch1, CH1_MIN, CH1_MAX, ROLL_MIN, ROLL_MAX);
-  tch4 = fmap(tch4, CH4_MIN, CH4_MAX, YAW_MIN, YAW_MAX);
-  
-  ch1Last = tch1;
-  ch2Last = tch2;
-  ch4Last = tch4;
+  if (tch4 < CH4_MIN || tch4 > CH4_MAX){
+  	tch4 = ch4Last;
+  }
+  else{
+  	tch4 = fmap(tch4, CH4_MIN, CH4_MAX, YAW_MIN, YAW_MAX);
+  	ch4Last = tch4;
+  }
   
   yprLast[0] = ypr[0];
   yprLast[1] = ypr[1];
@@ -190,13 +231,14 @@ void computePID(){
   c_yprLast[0] = c_ypr[0];
   c_yprLast[1] = c_ypr[1];
   c_yprLast[2] = c_ypr[2];
+  
+  PITCH_P_VAL=ROLL_P_VAL = fmap(ch5,CH5_MIN, CH5_MAX,0, 0.4 );
+  PITCH_I_VAL=ROLL_I_VAL = fmap(ch6,CH6_MIN, CH6_MAX,0, 0.4 );
+  PITCH_D_VAL=ROLL_D_VAL = fmap(ch7,CH7_MIN, CH7_MAX,0, 0.4 );
+  
+  rollReg.SetTunings(ROLL_P_VAL, ROLL_I_VAL, ROLL_D_VAL);
+  //pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
 
-  PITCH_P_VAL = fmap(ch5, CH5_MIN, CH5_MAX, 0, 0.5);
-  PITCH_I_VAL = fmap(ch6, CH6_MIN, CH6_MAX, 0, 0.5);
-  PITCH_P_VAL = fmap(ch7, CH7_MIN, CH7_MAX, 0, 0.5);
-  
-  pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
-  
   pitchReg.Compute();
   rollReg.Compute();
   yawReg.Compute();
@@ -205,11 +247,15 @@ void computePID(){
 void calcVel(){
 
   tch3 = ch3;
-  velocity = fmap(tch3, CH3_MIN, CH3_MAX, SMIN, SMAX);
-  
-  if((velocity < SMIN) || (velocity > SMAX)) velocity = velocityLast;
-
-  velocityLast = velocity;
+  if (tch3 < CH3_MIN || tch3 < CH3_MAX)
+  {
+  	velocity = velocityLast;
+  }
+  else
+  {
+  	velocity = fmap(tch3, CH3_MIN, CH3_MAX, SMIN, SMAX);
+  	velocityLast = velocity;
+  }
 
   va = velocity + bal_pitch - bal_roll - bal_axes;
   vb = velocity + bal_pitch + bal_roll + bal_axes;
@@ -249,10 +295,7 @@ void calcVel(){
   vc = oranc * velocity;
   vd = orand * velocity;
 */
-  Serial.print(va);Serial.print("\t");
-  Serial.print(vb);Serial.print("\t");
-  Serial.print(vc);Serial.print("\t");
-  Serial.println(vd);
+
  }
 void initReg(){
 
@@ -305,75 +348,66 @@ void initFilter(){
     c_ypr[1] = ypr[1];
     c_ypr[2] = ypr[2];
  }
-void kitle(){ interruptLock = true; } //interrupt locks
-void birak(){ interruptLock = false; }
+
 /*****Interrupt Service Routines ******/
 void rcInterrupt1(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange1;
     if(ctrl<=CH1_MAX && ctrl>=CH1_MIN) ch1 = ctrl;
-  }
+  
   rcLastChange1 = micros();
  }
 void rcInterrupt2(){
-  if(!interruptLock)
-  {
+ 
     ctrl = micros() - rcLastChange2;
     if(ctrl<=CH2_MAX && ctrl>=CH2_MIN) ch2 = ctrl;
-  }
+  
   rcLastChange2 = micros();
  }
 void rcInterrupt3(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange3;
     if(ctrl<=CH3_MAX && ctrl>=CH3_MIN) ch3 = ctrl;
-  }
+  
   rcLastChange3 = micros();
  }
 void rcInterrupt4(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange4;
     if(ctrl<=CH4_MAX && ctrl>=CH4_MIN) ch4 = ctrl;
-  }
+  
   rcLastChange4 = micros();
  }
 void rcInterrupt5(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange5;
     if(ctrl<=CH5_MAX && ctrl>=CH5_MIN) ch5 = ctrl;
-  }
+  
   rcLastChange5 = micros();
  }
 void rcInterrupt6(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange6;
     if(ctrl<=CH6_MAX && ctrl>=CH6_MIN) ch6 = ctrl;
-  }
+  
   rcLastChange6 = micros();
  }
 void rcInterrupt7(){
-  if(!interruptLock)
-  {
+ 
     ctrl = micros() - rcLastChange7;
     if(ctrl<=CH7_MAX && ctrl>=CH7_MIN) ch7 = ctrl;
-  }
+  
   rcLastChange7 = micros();
  }
 void rcInterrupt8(){
-  if(!interruptLock)
-  {
+  
     ctrl = micros() - rcLastChange8;
     if(ctrl<=CH8_MAX && ctrl>=CH8_MIN) ch8 = ctrl;
-  }
+  
   rcLastChange8 = micros();
  }
-/**************************************/
-float fmap(float x, float in_min, float in_max, float out_min, float out_max)
+/***********custom functions******************/
+float fmap(float x, float in_min, float in_max, float out_min, float out_max) //float map function
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
