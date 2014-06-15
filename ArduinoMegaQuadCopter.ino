@@ -15,14 +15,14 @@
 #define SOL_ARKA_MOTOR_PINI 9
 #define SAG_ARKA_MOTOR_PINI 3
 
-#define Aileron_Roll_PIN A15 //ch1
-#define Elevator_Pitch_PIN A14 //ch2
-#define Throttle_PIN A13 //ch3
-#define Rudder_Yaw_PIN A12 //ch4  
-#define AUXCH1 A11 
-#define AUXCH2 A10 
-#define AUXCH3 A9 
-#define AUXCH4 A8
+#define Aileron_Roll_PIN A8 //ch1
+#define Elevator_Pitch_PIN A9 //ch2
+#define Throttle_PIN A10 //ch3
+#define Rudder_Yaw_PIN A11 //ch4  
+#define AUXCH1 A12 
+#define AUXCH2 A13 
+#define AUXCH3 A14
+#define AUXCH4 A15
 
 #define ARM 950 //calibration neyle yaptıysan dikkat
 #define CH1_MIN 960
@@ -120,7 +120,7 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400);
-  //Serial.begin(57600);
+  Serial.begin(57600);
   initRC();
   initDOF();
   initMotors();
@@ -128,38 +128,40 @@ void setup(){
   initFilter();
  }
 void loop(){
-  
   getYPR();
   computePID();
   calcVel();
   updateMotors();
   
-  /*Serial.print(va);Serial.print("\t");
-    Serial.print(vb);Serial.print("\t");
-    Serial.print(vc);Serial.print("\t");
-    Serial.print(vd);Serial.print("\t\t");
-    
-    Serial.print(PITCH_P_VAL);Serial.print("\t");
-    Serial.print(PITCH_I_VAL);Serial.print("\t");
-    Serial.print(PITCH_D_VAL);Serial.print("\t\t");
+  Serial.print(va);Serial.print("\t");
+	Serial.print(vb);Serial.print("\t");
+	Serial.print(vc);Serial.print("\t");
+	Serial.print(vd);Serial.print("\t\t");
 
-    Serial.print(ROLL_P_VAL);Serial.print("\t");
-    Serial.print(ROLL_I_VAL);Serial.print("\t");
-    Serial.print(ROLL_D_VAL);Serial.print("\t\t");
+	Serial.print(PITCH_P_VAL);Serial.print("\t");
+	Serial.print(PITCH_I_VAL);Serial.print("\t");
+	Serial.print(PITCH_D_VAL);Serial.print("\t\t");
 
-    Serial.print(bal_axes);Serial.print("\t");
-    Serial.print(bal_pitch);Serial.print("\t");
-    Serial.print(bal_roll);Serial.print("\t\t");
+	Serial.print(ROLL_P_VAL);Serial.print("\t");
+	Serial.print(ROLL_I_VAL);Serial.print("\t");
+	Serial.print(ROLL_D_VAL);Serial.print("\t\t");
+
+	Serial.print(bal_axes);Serial.print("\t");
+	Serial.print(bal_pitch);Serial.print("\t");
+	Serial.print(bal_roll);Serial.print("\t\t");
 
 
-    Serial.print(c_ypr[0]);Serial.print("\t");
-    Serial.print(c_ypr[1]);Serial.print("\t");
-    Serial.print(c_ypr[2]);Serial.print("\t\t");
+	Serial.print(c_ypr[0]);Serial.print("\t");
+	Serial.print(c_ypr[1]);Serial.print("\t");
+	Serial.print(c_ypr[2]);Serial.print("\t\t");
 
-    Serial.print(ypr[0]);Serial.print("\t");
-    Serial.print(ypr[1]);Serial.print("\t");
-    Serial.println(ypr[2]);*/
+	Serial.print(ypr[0]);Serial.print("\t");
+	Serial.print(ypr[1]);Serial.print("\t");
+	Serial.print(ypr[2]);Serial.print("\t");
 
+	Serial.print(ch5);Serial.print("\t");
+	Serial.print(ch6);Serial.print("\t");
+	Serial.println(ch7);
  }
 void getYPR(){
 
@@ -197,7 +199,7 @@ void getYPR(){
  }
 void computePID(){
 	
-  lock();	tch1 = ch1; release();
+  kitle();	tch1 = ch1; serbest_birak();
   if(tch1 < CH1_MIN || tch1 > CH1_MAX){
 	tch1 = ch1Last;
   }
@@ -206,7 +208,7 @@ void computePID(){
   	ch1Last = tch1;
   }
 
-  lock(); tch2 = ch2; release();
+  kitle(); tch2 = ch2; serbest_birak();
   if(tch2 < CH2_MIN || tch2 > CH2_MAX){
   	tch2 = ch2Last;
   }
@@ -215,7 +217,7 @@ void computePID(){
   	ch2Last = tch2;
   }
 
-  lock(); tch4 = ch4; release();
+  kitle(); tch4 = ch4; serbest_birak();
   if (tch4 < CH4_MIN || tch4 > CH4_MAX){
   	tch4 = ch4Last;
   }
@@ -246,7 +248,7 @@ void computePID(){
  }
 void calcVel(){
 
-  lock(); tch3 = ch3; release();
+  kitle(); tch3 = ch3; serbest_birak();
   if (tch3 < CH3_MIN || tch3 > CH3_MAX)
   {
   	velocity = velocityLast;
@@ -348,8 +350,8 @@ void initFilter(){
     c_ypr[1] = ypr[1];
     c_ypr[2] = ypr[2];
  }
-void lock(){ interruptLock = true;}
-void release(){ interruptLock = false;}
+void kitle(){ interruptLock = true;}
+void serbest_birak(){ interruptLock = false;}
 /*****Interrupt Service Routines ******/
 void rcInterrupt1(){
   if (!interruptLock)
