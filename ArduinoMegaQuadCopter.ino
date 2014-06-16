@@ -91,9 +91,8 @@ float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          c_ypr[3]   = {0.0f, 0.0f, 0.0f}; //Complimentary with 0.98
 float	       c_yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          Ax, Ay, Az, Xh, Yh, t_roll, t_pitch, deltaT, gyroX, gyroY, gyroZ;
-float          orana, oranb,oranc,orand, oranUst, oranAlt;
 float          yawOffset = 0, tch1, tch2, tch3, tch4;
-int 		   tch7, tch8, servoTimer;
+int 		   tch7, tch8;
 
 PID yawReg  (&c_ypr[0], &bal_axes,  &tch4,   YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
 PID pitchReg(&c_ypr[1], &bal_pitch, &tch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL,   REVERSE);
@@ -255,25 +254,21 @@ void initDOF(){
 void initServos(){
 	s1.attach(SERVO1);
 	s2.attach(SERVO2);
-	s1.write(90);
-	s2.write(90);
+	s1.writeMicroseconds(1500);
+	s2.writeMicroseconds(1500);
  }
 void updateServos(){
 	
-	if(millis()-servoTimer > 1000)
-	{
-		kitle(); tch7 = ch7; serbest_birak();
-		tch7 = fmap(tch7, CH7_MAX, CH7_MIN, 180, 0);
-		tch7 = floor(tch7/10)*10;
-		s1.write(tch7);
+	kitle(); tch7 = ch7; serbest_birak();
+	tch7 = fmap(tch7, CH7_MIN, CH7_MAX, SMIN, SMAX);
+	tch7 = floor(tch7/10)*10;
+	s1.writeMicroseconds(tch7);
 
-		kitle(); tch8 = ch8; serbest_birak();
-		tch8 = fmap(tch8, CH8_MAX, CH8_MIN, 180, 0);
-		tch8 = floor(tch8/10)*10;
-		s2.write(tch8);
+	kitle(); tch8 = ch8; serbest_birak();
+	tch8 = fmap(tch8, CH8_MIN, CH8_MAX, SMIN, SMAX);
+	tch8 = floor(tch8/10)*10;
+	s2.write(tch8);
 
-		servoTimer = millis();
-	}
     /*tch7 = map(ch7, CH7_MAX, CH7_MIN, 180, 0);
     if(abs(ch7Last-tch7)>10)
     {
