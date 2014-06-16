@@ -14,6 +14,8 @@
 #define SAG_ON_MOTOR_PINI 6
 #define SOL_ARKA_MOTOR_PINI 9
 #define SAG_ARKA_MOTOR_PINI 3
+#define SERVO1 4
+#define SERVO2 11
 
 #define Aileron_Roll_PIN A8 //ch1
 #define Elevator_Pitch_PIN A9 //ch2
@@ -21,8 +23,8 @@
 #define Rudder_Yaw_PIN A11 //ch4  
 #define AUXCH1 A12 
 #define AUXCH2 A13 
-#define AUXCH3 A14
-#define AUXCH4 A15
+#define AUXCH3 A14 // ch7
+#define AUXCH4 A15 // ch8
 
 #define ARM 950 //calibration neyle yaptıysan dikkat
 #define CH1_MIN 960
@@ -41,22 +43,11 @@
 #define CH7_MAX 1844
 #define CH8_MIN 1012
 #define CH8_MAX 1844
-#define SMIN 1000 //servo writemicroseconds minimum
+#define SMIN 1000 //servo writeMicroseconds minimum
 #define SMAX 2000 //maksimum
 #define ARM_DELAY 10000 //wait after arm 10 SECONDS
 #define accZOffset -204 
 
-/*#define PITCH_P_VAL 0
-#define PITCH_I_VAL 0
-#define PITCH_D_VAL 0
-
-#define ROLL_P_VAL 0.25
-#define ROLL_I_VAL 0
-#define ROLL_D_VAL 0
-
-#define YAW_P_VAL 0
-#define YAW_I_VAL 0
-#define YAW_D_VAL 0 */
 float PITCH_P_VAL=0;
 float PITCH_I_VAL=0;
 float PITCH_D_VAL=0;
@@ -79,8 +70,7 @@ float YAW_D_VAL=0;
 #define PID_ROLL_INFLUENCE 20
 #define PID_YAW_INFLUENCE 20
 
-#define SENS   0.0078125 // =8/1024
-//#define TODEG 57.2957795 there already exist RAD_TO_DEG no need for this
+#define SENS   0.0078125 // =8/1024 //#define TODEG 57.2957795 there already exist RAD_TO_DEG no need for this
 
 ADXL345 acc;  int16_t ax, ay, az;
 BMP085 baro;  float temperature, pressure, altitude;
@@ -88,14 +78,14 @@ HMC5883L mag; int16_t mx, my, mz;
 ITG3200 gyro; int16_t gx, gy, gz; 
 
 TinyGPSPlus    gps;
-Servo          a,b,c,d;
+Servo          a,b,c,d, s1, s2;
 
 float          velocity, velocityLast;
 float          bal_roll = 0.0f, bal_pitch = 0.0f, bal_axes = 0.0f;
 int            va, vb, vc, vd; // motor hızları //1000-2000
 float          ctrl; //rc dğer kontrol <MIN >MAX
 boolean        interruptLock = false;
-float          ch1, ch1Last, ch2, ch2Last, ch3, ch3Last, ch4, ch4Last, ch5, ch6, ch7, ch8;
+float          ch1, ch1Last, ch2, ch2Last, ch3, ch3Last, ch4, ch4Last, ch5, ch6, ch7, ch7Last, ch8, ch8Last;
 float          ypr[3]     = {0.0f, 0.0f, 0.0f}; //Acc
 float          yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          c_ypr[3]   = {0.0f, 0.0f, 0.0f}; //Complimentary with 0.98
@@ -103,6 +93,7 @@ float	       c_yprLast[3] = {0.0f, 0.0f, 0.0f};
 float          Ax, Ay, Az, Xh, Yh, t_roll, t_pitch, deltaT, gyroX, gyroY, gyroZ;
 float          orana, oranb,oranc,orand, oranUst, oranAlt;
 float          yawOffset = 0, tch1, tch2, tch3, tch4;
+int 		   tch7, tch8, servoTimer;
 
 PID yawReg  (&c_ypr[0], &bal_axes,  &tch4,   YAW_P_VAL,   YAW_I_VAL,   YAW_D_VAL,   DIRECT );
 PID pitchReg(&c_ypr[1], &bal_pitch, &tch2, PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL,   REVERSE);
@@ -120,48 +111,22 @@ unsigned long  rcLastChange8 = micros();
 void setup(){
   Wire.begin();
   Serial1.begin(38400);
-  Serial.begin(57600);
+  //Serial.begin(57600);
   initRC();
   initDOF();
+  initServos();
   initMotors();
   initReg();
   initFilter();
+  
  }
 void loop(){
   getYPR();
   computePID();
   calcVel();
   updateMotors();
+  updateServos();
   
-  Serial.print(va);Serial.print("\t");
-	Serial.print(vb);Serial.print("\t");
-	Serial.print(vc);Serial.print("\t");
-	Serial.print(vd);Serial.print("\t\t");
-
-	Serial.print(PITCH_P_VAL);Serial.print("\t");
-	Serial.print(PITCH_I_VAL);Serial.print("\t");
-	Serial.print(PITCH_D_VAL);Serial.print("\t\t");
-
-	Serial.print(ROLL_P_VAL);Serial.print("\t");
-	Serial.print(ROLL_I_VAL);Serial.print("\t");
-	Serial.print(ROLL_D_VAL);Serial.print("\t\t");
-
-	Serial.print(bal_axes);Serial.print("\t");
-	Serial.print(bal_pitch);Serial.print("\t");
-	Serial.print(bal_roll);Serial.print("\t\t");
-
-
-	Serial.print(c_ypr[0]);Serial.print("\t");
-	Serial.print(c_ypr[1]);Serial.print("\t");
-	Serial.print(c_ypr[2]);Serial.print("\t\t");
-
-	Serial.print(ypr[0]);Serial.print("\t");
-	Serial.print(ypr[1]);Serial.print("\t");
-	Serial.print(ypr[2]);Serial.print("\t");
-
-	Serial.print(ch5);Serial.print("\t");
-	Serial.print(ch6);Serial.print("\t");
-	Serial.println(ch7);
  }
 void getYPR(){
 
@@ -234,12 +199,12 @@ void computePID(){
   c_yprLast[1] = c_ypr[1];
   c_yprLast[2] = c_ypr[2];
   
-  PITCH_P_VAL=ROLL_P_VAL = fmap(ch5,CH5_MIN, CH5_MAX,0, 0.4 );
+  /*PITCH_P_VAL=ROLL_P_VAL = fmap(ch5,CH5_MIN, CH5_MAX,0, 0.4 );
   PITCH_I_VAL=ROLL_I_VAL = fmap(ch6,CH6_MIN, CH6_MAX,0, 0.4 );
   PITCH_D_VAL=ROLL_D_VAL = fmap(ch7,CH7_MIN, CH7_MAX,0, 0.4 );
   
   rollReg.SetTunings(ROLL_P_VAL, ROLL_I_VAL, ROLL_D_VAL);
-  pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
+  pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);*/
 
   pitchReg.Compute();
   rollReg.Compute();
@@ -265,39 +230,6 @@ void calcVel(){
   vc = velocity - bal_pitch - bal_roll + bal_axes;
   vd = velocity - bal_pitch + bal_roll - bal_axes;
 
-/*
-
-  vb = ( ((100+bal_pitch)/100)*velocity   +   ((100+bal_roll)/100)*velocity     ) /2;
-  va = ( ((100+bal_pitch)/100)*velocity   +   (abs((-100+bal_roll)/100))*velocity ) /2;
-
-  vd = ( (abs((-100+bal_pitch)/100))*velocity +   ((100+bal_roll)/100)*velocity   ) /2; 
-  vc = ( (abs((-100+bal_pitch)/100))*velocity +   (abs((-100+bal_roll)/100))*velocity ) /2;
-
-  
-  //oranUst = (float)SMAX /(float)velocity;
-  oranUst = (float)4/3; //
-  //oranAlt = (float)SMIN / (float)velocity;
-  oranAlt = (float)2/3; //
-
-  orana = -bal_roll +bal_pitch + bal_axes;
-  orana = fmap(orana, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
-  
-  oranb = +bal_roll +bal_pitch - bal_axes;
-  oranb = fmap(oranb, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
-
-  oranc = -bal_roll -bal_pitch - bal_axes;
-  oranc = fmap(oranc, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
-
-  orand = +bal_roll -bal_pitch + bal_axes;
-  orand = fmap(orand, -TOTAL_INFLUENCE, TOTAL_INFLUENCE, oranAlt, oranUst);
-
-
-  va = orana * velocity; 
-  vb = oranb * velocity;
-  vc = oranc * velocity;
-  vd = orand * velocity;
-*/
-
  }
 void initReg(){
 
@@ -319,6 +251,44 @@ void initDOF(){
   gyro.initialize(); boolean g = gyro.testConnection();
   if(!(a & b & m & g))
     initDOF();
+ }
+void initServos(){
+	s1.attach(SERVO1);
+	s2.attach(SERVO2);
+	s1.write(90);
+	s2.write(90);
+ }
+void updateServos(){
+	
+	if(millis()-servoTimer > 1000)
+	{
+		kitle(); tch7 = ch7; serbest_birak();
+		tch7 = fmap(tch7, CH7_MAX, CH7_MIN, 180, 0);
+		tch7 = floor(tch7/10)*10;
+		s1.write(tch7);
+
+		kitle(); tch8 = ch8; serbest_birak();
+		tch8 = fmap(tch8, CH8_MAX, CH8_MIN, 180, 0);
+		tch8 = floor(tch8/10)*10;
+		s2.write(tch8);
+
+		servoTimer = millis();
+	}
+    /*tch7 = map(ch7, CH7_MAX, CH7_MIN, 180, 0);
+    if(abs(ch7Last-tch7)>10)
+    {
+      s1.write(tch7);
+      Serial.print(tch7);Serial.print("\t");
+      ch7Last = tch7;
+    }
+    
+    tch8 = fmap(ch8, CH8_MAX, CH8_MIN, 180, 0);
+    if(abs(ch8Last-tch8)>10)
+    {
+      s2.write(tch8);
+      Serial.println(tch8);
+      ch8Last = tch8;  
+    }*/
  }
 void initMotors(){
   a.attach(SOL_ON_MOTOR_PINI);   b.attach(SAG_ON_MOTOR_PINI);
@@ -342,7 +312,6 @@ void initRC(){
   PCintPort::attachInterrupt(AUXCH3,             rcInterrupt7,   CHANGE); 
   PCintPort::attachInterrupt(AUXCH4,             rcInterrupt8,   CHANGE);
  }
- 
 void initFilter(){
     getYPR();
     yawOffset = ypr[0];
