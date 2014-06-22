@@ -111,17 +111,12 @@ void setup(){
 
 	Wire.begin();
 	Serial1.begin(38400);
-	s1.attach(SERVO1);
-	s2.attach(SERVO2);
-	s1.write(90);
-	s2.write(70);
+	initServos();
 	initRC();
 	initDOF();
 	initMotors();
 	initReg();
 	initFilter();
-	s1.detach();
-	s2.detach();
  }
 void loop(){
 
@@ -206,7 +201,7 @@ void computePID(){
 	PITCH_I_VAL=ROLL_I_VAL = fmap(ch6,CH6_MIN, CH6_MAX,0, 0.4 );
 	PITCH_D_VAL=ROLL_D_VAL = fmap(ch7,CH7_MIN, CH7_MAX,0, 0.4 );
 
-	rollReg.SetTunings(ROLL_P_VAL, ROLL_I_VAL, ROLL_D_VAL);
+	rollReg.SetTunings(ROLL_P_VAL, ROLL_I_VAL, ROLL_D_VAL); //input for PID from rc
 	pitchReg.SetTunings(PITCH_P_VAL, PITCH_I_VAL, PITCH_D_VAL);
 
 	pitchReg.Compute();
@@ -231,6 +226,16 @@ void calcVel(){
 	vc = velocity - bal_pitch - bal_roll + bal_axes;
 	vd = velocity - bal_pitch + bal_roll - bal_axes;
 
+ }
+
+void initServos(){
+	s1.attach(SERVO1);
+	s2.attach(SERVO2);
+	s1.write(90);
+	s2.write(70);
+	delay(15);
+	s1.detach();
+	s2.detach();
  }
 void initReg(){
 
